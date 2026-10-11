@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 class _FieldLabel extends StatelessWidget {
   const _FieldLabel(this.label);
@@ -29,6 +29,47 @@ class _SettingsHeader extends StatelessWidget {
       ),
     ),
   );
+}
+
+class _LoadErrorView extends StatelessWidget {
+  const _LoadErrorView({
+    required this.error,
+    required this.onRetry,
+  });
+
+  final Object error;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.cloud_off_outlined, size: 36, color: _danger),
+          const SizedBox(height: 12),
+          const Text(
+            'Impossible de charger vos données',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            error.toString(),
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: _muted),
+          ),
+          const SizedBox(height: 16),
+          FilledButton.icon(
+            onPressed: onRetry,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Réessayer'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _TaskFormResult {
@@ -105,6 +146,9 @@ String _clock(DateTime dateTime) =>
 
 String _timeOfDayLabel(TimeOfDay time) =>
     '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+
+TimeOfDay _timeOfDayFromMinutes(int minuteOfDay) =>
+    TimeOfDay(hour: minuteOfDay ~/ 60, minute: minuteOfDay % 60);
 
 String _formatDate(DateTime dateTime) =>
     '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';

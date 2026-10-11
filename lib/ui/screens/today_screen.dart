@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 extension _PlanoTodayScreen on _PlanoAppState {
   Widget _todayPage() {
@@ -436,7 +436,10 @@ extension _PlanoTodayScreen on _PlanoAppState {
     child: ListTile(
       leading: const Icon(Icons.event_available_outlined, color: _muted),
       title: Text(event.title),
-      subtitle: Text('${_clock(event.start)}–${_clock(event.end)} · Fixe'),
+      subtitle: Text(
+        '${_clock(event.start)}–${_clock(event.end)} · Fixe'
+        '${event.isDemo ? ' · Exemple fictif, non importé' : ''}',
+      ),
       dense: true,
     ),
   );

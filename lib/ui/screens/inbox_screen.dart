@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 extension _PlanoInboxScreen on _PlanoAppState {
   Widget _inboxPage() {
@@ -30,6 +30,18 @@ extension _PlanoInboxScreen on _PlanoAppState {
       ),
       body: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 10),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Les tâches capturées restent ici jusqu’à leur planification.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: _muted,
+                    ),
+              ),
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
             child: _QuickCapture(onSubmit: _captureTask),

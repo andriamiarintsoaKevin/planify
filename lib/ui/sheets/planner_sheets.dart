@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 class _PlannerSetupSheet extends StatefulWidget {
   const _PlannerSetupSheet({

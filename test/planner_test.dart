@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:planify/planner.dart';
+import 'package:planify/domain/planner.dart';
 
 void main() {
   final day = DateTime(2026, 10, 12);

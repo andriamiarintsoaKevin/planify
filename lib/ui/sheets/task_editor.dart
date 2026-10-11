@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 class _QuickCapture extends StatefulWidget {
   const _QuickCapture({required this.onSubmit});

@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 extension _PlanoTheme on _PlanoAppState {
   ThemeData get _theme {

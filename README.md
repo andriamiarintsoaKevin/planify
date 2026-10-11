@@ -1,12 +1,14 @@
-# Planify
+# Plano
 
-Planify est un prototype Flutter en français pour organiser une journée de
+Plano est un prototype Flutter en français pour organiser une journée de
 travail : capturer des tâches, préparer un planning déterministe, le prévisualiser
 et le valider, puis annuler la dernière validation.
 
-## Fonctionnalités du MVP
+## Ce que l’application fait
 
 - Écrans Aujourd’hui, Inbox, Calendrier et Réglages.
+- L’Inbox est la boîte des tâches non planifiées ; une tâche quitte l’Inbox
+  après validation d’un créneau.
 - Création et édition de tâches avec projet, durée, deadline, priorité, notes et
   verrouillage de créneaux déjà planifiés.
 - Planification locale autour des événements fixes, de la pause déjeuner et
@@ -17,23 +19,39 @@ et le valider, puis annuler la dernière validation.
   par snapshot en mémoire.
 - Thème clair/sombre et horaires de travail modifiables.
 
-L’application démarre avec des tâches et un événement de démonstration. Les
-données restent en mémoire et sont réinitialisées au redémarrage.
+## Ce que l’application ne fait pas encore
+
+- Il n’y a pas de compte utilisateur, de backend, de base de données cloud ni de
+  synchronisation entre appareils. Toutes les modifications sont temporaires et
+  disparaissent à la fermeture de l’application.
+- « Point client » (11 h–11 h 45) est un faux événement fixe créé pour illustrer
+  le planificateur ; il ne provient pas d’un calendrier connecté.
+- Les tâches initiales sont des exemples modifiables. Elles ne sont pas
+  personnelles et ne sont pas synchronisées.
+- L’import de calendrier, les notifications, les abonnements, les paiements, la
+  facturation, les quotas et les fonctions serveur ne sont pas implémentés.
+- L’application n’envoie pas les tâches à une IA. Le plan est calculé par le
+  moteur local déterministe.
 
 ## Organisation du code
 
 - `lib/main.dart` : démarrage, état de démonstration et actions applicatives.
-- `lib/today_screen.dart`, `lib/inbox_screen.dart`, `lib/calendar_screen.dart`
-  et `lib/settings_screen.dart` : UI par onglet.
-- `lib/task_editor.dart` : capture rapide et formulaire de tâche.
-- `lib/planner_sheets.dart` : réglages et aperçu du plan.
-- `lib/ui_helpers.dart` : éléments de présentation et résultats des formulaires.
-- `lib/app_theme.dart` : thème clair et sombre.
-- `lib/planner.dart` : modèles de tâches et algorithme déterministe.
+- `lib/ui/screens/` : écrans Aujourd’hui, Inbox, Calendrier, Réglages et guide
+  produit.
+- `lib/ui/sheets/` : capture/édition de tâche et feuilles de planification.
+- `lib/ui/widgets/` : éléments de présentation et résultats des formulaires.
+- `lib/ui/theme/` : thème clair et sombre.
+- `lib/domain/planner.dart` : modèles de tâches et algorithme déterministe.
+- `lib/data/plano_repository.dart` : contrat asynchrone entre l’application et
+  ses données.
+- `lib/data/demo/demo_plano_repository.dart` : adaptateur en mémoire utilisé
+  actuellement pour la démonstration.
 
 Les widgets d’interface sont répartis en fichiers `part` de la bibliothèque
 `main.dart` afin de garder les implémentations internes privées. Le moteur de
-planification reste indépendant de Flutter.
+planification reste indépendant de Flutter. L’application reçoit son dépôt par
+injection ; un futur adaptateur cloud pourra implémenter le même contrat sans
+lier les écrans au SDK d’un fournisseur.
 
 ## Exécution et tests
 
@@ -46,10 +64,30 @@ flutter analyze
 
 ## Intégrations non incluses
 
-La synchronisation calendrier affichée est indicative. Ces intégrations
-nécessitent des configurations de projet et identifiants spécifiques qui ne
-sont pas présents dans ce dépôt. Le moteur de planification est du Dart pur et
-ne fait aucun appel à un LLM.
+La synchronisation calendrier affichée est indicative. Les intégrations SaaS
+nécessitent un backend, une configuration de projet, des identifiants et des
+règles d’accès par utilisateur qui ne sont pas présents dans ce dépôt.
+
+## Étapes proposées pour une version SaaS
+
+1. Ajouter des contrats dédiés pour l’authentification, les abonnements et les
+   snapshots de plan, ainsi que des entités de profil explicites.
+2. Choisir et configurer le backend (Firebase était proposé dans le cahier des
+   charges initial) : authentification, stockage cloud, règles d’accès par
+   utilisateur et gestion des secrets côté serveur.
+3. Implémenter les dépôts distants derrière les contrats existants et gérer les
+   états de chargement, erreurs, mode hors ligne et synchronisation.
+4. Ajouter l’import de calendrier en lecture seule et la replanification avec
+   aperçu et historique annulable.
+5. Intégrer les abonnements et quotas avec validation des achats côté serveur,
+   puis notifications et suivi produit respectueux de la vie privée.
+6. Déployer les fonctions serveur, configurer sauvegardes, supervision, sécurité,
+   conditions d’utilisation et politique de confidentialité avant une mise en
+   production.
+
+La planification doit rester déterministe et testable ; un modèle de langage
+pourrait uniquement interpréter une saisie ou expliquer les résultats, après
+mise en place d’un service serveur sécurisé.
 
 ## License
 

@@ -1,16 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'planner.dart';
+import 'data/demo/demo_plano_repository.dart';
+import 'data/plano_repository.dart';
+import 'domain/planner.dart';
 
-part 'today_screen.dart';
-part 'inbox_screen.dart';
-part 'calendar_screen.dart';
-part 'settings_screen.dart';
-part 'app_theme.dart';
-part 'task_editor.dart';
-part 'planner_sheets.dart';
-part 'ui_helpers.dart';
+part 'ui/screens/today_screen.dart';
+part 'ui/screens/inbox_screen.dart';
+part 'ui/screens/calendar_screen.dart';
+part 'ui/screens/settings_screen.dart';
+part 'ui/theme/app_theme.dart';
+part 'ui/sheets/task_editor.dart';
+part 'ui/sheets/planner_sheets.dart';
+part 'ui/widgets/ui_helpers.dart';
+part 'ui/screens/product_guide.dart';
 
 void main() {
   runApp(const PlanoApp());
@@ -34,7 +37,9 @@ const _projectColors = <String, Color>{
 };
 
 class PlanoApp extends StatefulWidget {
-  const PlanoApp({super.key});
+  const PlanoApp({super.key, this.repository});
+
+  final PlanoRepository? repository;
 
   @override
   State<PlanoApp> createState() => _PlanoAppState();
@@ -44,70 +49,78 @@ class _PlanoAppState extends State<PlanoApp> {
   bool _darkMode = false;
   TimeOfDay _workStart = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _workEnd = const TimeOfDay(hour: 18, minute: 0);
+  late final PlanoRepository _repository =
+      widget.repository ?? DemoPlanoRepository();
   final _tasks = <PlanoTask>[];
   DateTime _selectedDate = _dateOnly(DateTime.now());
   List<FixedEvent> _events = [];
   int _tabIndex = 0;
   List<PlanoTask>? _lastSnapshot;
   BuildContext? _appContext;
+  bool _isLoading = true;
+  Object? _loadError;
 
   @override
   void initState() {
     super.initState();
-    _tasks.addAll([
-      PlanoTask(
-        id: 'task-1',
-        title: 'Préparer la proposition commerciale',
-        project: 'Client A',
-        durationMinutes: 60,
-        priority: TaskPriority.high,
-        deadline: _atTime(_selectedDate, 17, 0),
-      ),
-      PlanoTask(
-        id: 'task-2',
-        title: 'Répondre aux retours du site',
-        project: 'Studio',
-        durationMinutes: 45,
-        priority: TaskPriority.medium,
-      ),
-      PlanoTask(
-        id: 'task-3',
-        title: 'Envoyer la facture de septembre',
-        project: 'Personnel',
-        durationMinutes: 30,
-        priority: TaskPriority.low,
-      ),
-      PlanoTask(
-        id: 'task-4',
-        title: 'Revoir le brief du projet',
-        project: 'Projet',
-        durationMinutes: 90,
-        priority: TaskPriority.high,
-        deadline: _atTime(_selectedDate, 18, 0),
-      ),
-    ]);
-    _updateEvents();
+    _loadInitialData();
   }
 
-  void _updateEvents() {
-    _events = [
-      FixedEvent(
-        title: 'Point client',
-        start: _atTime(_selectedDate, 11, 0),
-        end: _atTime(_selectedDate, 11, 45),
-      ),
-    ];
-  }
-
-  void _selectDate(DateTime date) {
+  Future<void> _loadInitialData() async {
     setState(() {
-      _selectedDate = _dateOnly(date);
-      _updateEvents();
+      _isLoading = true;
+      _loadError = null;
     });
+    try {
+      final values = await Future.wait<Object>([
+        _repository.loadTasks(),
+        _repository.loadEvents(_selectedDate),
+        _repository.loadWorkSchedule(),
+      ]);
+      if (!mounted) return;
+      final schedule = values[2] as WorkSchedule;
+      setState(() {
+        _tasks
+          ..clear()
+          ..addAll(values[0] as List<PlanoTask>);
+        _events = values[1] as List<FixedEvent>;
+        _workStart = _timeOfDayFromMinutes(schedule.startMinute);
+        _workEnd = _timeOfDayFromMinutes(schedule.endMinute);
+        _isLoading = false;
+      });
+    } on Object catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _loadError = error;
+      });
+    }
+  }
+
+  Future<void> _selectDate(DateTime date) async {
+    final selectedDate = _dateOnly(date);
+    setState(() {
+      _selectedDate = selectedDate;
+    });
+    try {
+      final events = await _repository.loadEvents(selectedDate);
+      if (!mounted || !_sameDay(_selectedDate, selectedDate)) return;
+      setState(() => _events = events);
+    } on Object catch (error) {
+      if (mounted) {
+        _showMessage('Impossible de charger les événements : $error');
+      }
+    }
   }
 
   void _setDarkMode(bool enabled) {
     setState(() => _darkMode = enabled);
+  }
+
+  void _openProductGuide() {
+    Navigator.of(_appContext!).push<void>(
+      MaterialPageRoute<void>(builder: (_) => const _ProductGuideScreen()),
+    );
   }
 
   @override
@@ -128,6 +141,21 @@ class _PlanoAppState extends State<PlanoApp> {
   }
 
   Widget _buildHome() {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_loadError != null) {
+      return Scaffold(
+        body: Center(
+          child: _LoadErrorView(
+            error: _loadError!,
+            onRetry: _loadInitialData,
+          ),
+        ),
+      );
+    }
     final pages = [
       _todayPage(),
       _inboxPage(),
@@ -185,6 +213,7 @@ class _PlanoAppState extends State<PlanoApp> {
     if (result == null) return;
     if (result.deleteId != null) {
       setState(() => _tasks.removeWhere((item) => item.id == result.deleteId));
+      if (!await _persistTasks()) return;
       return;
     }
     final updated = result.task!;
@@ -196,12 +225,13 @@ class _PlanoAppState extends State<PlanoApp> {
         _tasks[index] = updated;
       }
     });
+    if (!await _persistTasks()) return;
     _showMessage(
       task == null ? 'Tâche ajoutée à l’Inbox' : 'Tâche mise à jour',
     );
   }
 
-  void _captureTask(String title) {
+  Future<void> _captureTask(String title) async {
     if (title.trim().isEmpty) return;
     setState(() {
       _tasks.add(
@@ -211,6 +241,7 @@ class _PlanoAppState extends State<PlanoApp> {
         ),
       );
     });
+    await _persistTasks();
   }
 
   Future<void> _openPlannerSetup({PlanoTask? onlyTask}) async {
@@ -286,11 +317,14 @@ class _PlanoAppState extends State<PlanoApp> {
       ),
     );
     if (approval != null && mounted) {
-      _applyPlan(result, approval.lockedTaskIds);
+      await _applyPlan(result, approval.lockedTaskIds);
     }
   }
 
-  void _applyPlan(PlanResult result, Set<String> lockedTaskIds) {
+  Future<void> _applyPlan(
+    PlanResult result,
+    Set<String> lockedTaskIds,
+  ) async {
     _lastSnapshot = List<PlanoTask>.of(_tasks);
     setState(() {
       for (final placement in result.placements) {
@@ -315,6 +349,7 @@ class _PlanoAppState extends State<PlanoApp> {
         );
       }
     });
+    if (!await _persistTasks()) return;
     ScaffoldMessenger.of(_appContext!).showSnackBar(
       SnackBar(
         content: const Text('Planning modifié'),
@@ -324,7 +359,7 @@ class _PlanoAppState extends State<PlanoApp> {
     setState(() => _tabIndex = 0);
   }
 
-  void _undoLastPlan() {
+  Future<void> _undoLastPlan() async {
     final snapshot = _lastSnapshot;
     if (snapshot == null) return;
     setState(() {
@@ -333,15 +368,17 @@ class _PlanoAppState extends State<PlanoApp> {
         ..addAll(snapshot);
       _lastSnapshot = null;
     });
+    if (!await _persistTasks()) return;
     _showMessage('Le planning précédent a été restauré');
   }
 
-  void _deleteTask(PlanoTask task) {
+  Future<void> _deleteTask(PlanoTask task) async {
     setState(() => _tasks.removeWhere((item) => item.id == task.id));
+    if (!await _persistTasks()) return;
     _showMessage('Tâche supprimée');
   }
 
-  void _toggleTaskLock(PlanoTask task) {
+  Future<void> _toggleTaskLock(PlanoTask task) async {
     setState(() {
       final index = _tasks.indexWhere((item) => item.id == task.id);
       if (index >= 0) {
@@ -350,6 +387,7 @@ class _PlanoAppState extends State<PlanoApp> {
         );
       }
     });
+    if (!await _persistTasks()) return;
     _showMessage(task.isLocked ? 'Horaire déverrouillé' : 'Horaire verrouillé');
   }
 
@@ -362,10 +400,7 @@ class _PlanoAppState extends State<PlanoApp> {
       locale: const Locale('fr', 'FR'),
     );
     if (selected != null) {
-      setState(() {
-        _selectedDate = _dateOnly(selected);
-        _updateEvents();
-      });
+      await _selectDate(selected);
     }
   }
 
@@ -388,10 +423,32 @@ class _PlanoAppState extends State<PlanoApp> {
       _showMessage('La fin de journée doit être après son début');
       return;
     }
+  final schedule = WorkSchedule(
+    startMinute: startMinutes,
+    endMinute: endMinutes,
+  );
+  try {
+    await _repository.saveWorkSchedule(schedule);
+    if (!mounted) return;
     setState(() {
       _workStart = start;
       _workEnd = end;
     });
+  } on Object catch (error) {
+    _showMessage('Impossible d’enregistrer les horaires : $error');
+  }
+  }
+
+  Future<bool> _persistTasks() async {
+    try {
+      await _repository.saveTasks(List.unmodifiable(_tasks));
+      return true;
+    } on Object catch (error) {
+      if (mounted) {
+        _showMessage('Impossible d’enregistrer les tâches : $error');
+      }
+      return false;
+    }
   }
 
   void _showMessage(String message) {

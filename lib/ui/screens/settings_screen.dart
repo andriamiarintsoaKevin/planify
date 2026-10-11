@@ -1,4 +1,4 @@
-part of 'main.dart';
+part of '../../main.dart';
 
 extension _PlanoSettingsScreen on _PlanoAppState {
   Widget _settingsPage() {
@@ -71,11 +71,22 @@ extension _PlanoSettingsScreen on _PlanoAppState {
           ),
           const SizedBox(height: 14),
           const _SettingsHeader('À propos'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.info_outline),
+              title: const Text('Comprendre Plano'),
+              subtitle: const Text(
+                'Fonctions présentes, limites et prochaines étapes',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _openProductGuide,
+            ),
+          ),
           const Card(
             child: ListTile(
-              leading: Icon(Icons.info_outline),
-              title: Text('Plano'),
-              subtitle: Text('MVP local · version 1.0.0'),
+              leading: Icon(Icons.layers_outlined),
+              title: Text('MVP local · version 1.0.0'),
+              subtitle: Text('Données de démonstration, non synchronisées'),
             ),
           ),
         ],
