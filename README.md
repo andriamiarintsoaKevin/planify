@@ -9,19 +9,23 @@ valider, puis annuler la dernière validation.
 - Écrans Aujourd’hui, Inbox, Calendrier et Réglages.
 - L’Inbox est la boîte des tâches non planifiées ; une tâche quitte l’Inbox
   après validation d’un créneau.
-- Création et édition de tâches avec projet, durée, deadline, priorité, notes et
-  verrouillage de créneaux déjà planifiés.
+- Création et édition de tâches avec projet, deadline, priorité, notes et
+  verrouillage de créneaux déjà planifiés. Lorsqu’une tâche planifiée a une
+  deadline ultérieure à son heure de début, son créneau se termine à la deadline.
+- Les tâches sont différenciées par priorité : basse en vert, normale en indigo
+  et haute en rouge, avec des teintes adaptées au thème clair ou sombre.
 - Planification manuelle d’une tâche à une date et une heure choisies. Les
   chevauchements sont autorisés et signalés en rouge ; les tâches terminées
   restent visibles en grisé et ne peuvent plus être modifiées ou supprimées.
-- Planification locale sur toute la journée (00 h–24 h), autour des événements
-  fixes. La pause déjeuner, la marge entre les tâches et la priorité aux tâches
+- Planification locale des tâches de l’Inbox sans horaire, à partir de l’heure
+  actuelle lorsqu’on planifie aujourd’hui et autour des horaires déjà fixés.
+  La pause déjeuner, la marge entre les tâches et la priorité aux tâches
   urgentes sont des règles facultatives, désactivées par défaut.
 - Tri déterministe par deadline, priorité et durée. Les tâches sans durée sont
   estimées à 30 minutes.
 - Aperçu du plan, liste des tâches qui ne rentrent pas, validation et annulation
   par snapshot en mémoire.
-- Thème clair/sombre.
+- Thème clair/sombre avec champs, panneaux, navigation et contrastes adaptés.
 - Tâches et préférences enregistrées localement dans une base SQLite, conservées
   après fermeture ou redémarrage de l’application jusqu’à leur suppression.
 

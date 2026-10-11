@@ -125,6 +125,21 @@ class PlanSettings {
   final bool prioritizeHighPriority;
 }
 
+DateTime? scheduledEndForTask({
+  required DateTime? start,
+  required DateTime? deadline,
+  required int? durationMinutes,
+}) {
+  if (start == null) return null;
+  if (deadline != null) {
+    if (!deadline.isAfter(start)) {
+      throw ArgumentError.value(deadline, 'deadline', 'Must be after start');
+    }
+    return deadline;
+  }
+  return start.add(Duration(minutes: durationMinutes ?? 30));
+}
+
 PlanResult generatePlan({
   required List<PlanoTask> tasks,
   required List<FixedEvent> fixedEvents,
@@ -237,7 +252,12 @@ List<_Interval> _freeIntervals(
   for (final interval in occupied) {
     if (!interval.end.isAfter(cursor)) continue;
     if (interval.start.isAfter(cursor)) {
-      free.add(_Interval(cursor, interval.start));
+      free.add(
+        _Interval(
+          cursor,
+          interval.start.isBefore(end) ? interval.start : end,
+        ),
+      );
     }
     final bufferedEnd = interval.end.add(Duration(minutes: bufferMinutes));
     if (bufferedEnd.isAfter(cursor)) cursor = bufferedEnd;
@@ -307,6 +327,37 @@ bool isTaskPast(PlanoTask task, DateTime now) =>
     task.status == TaskStatus.scheduled &&
     task.scheduledEnd != null &&
     !task.scheduledEnd!.isAfter(now);
+
+bool taskOverlapsDay(PlanoTask task, DateTime day) {
+  final start = task.scheduledStart;
+  final end = task.scheduledEnd;
+  if (task.status != TaskStatus.scheduled || start == null || end == null) {
+    return false;
+  }
+  final dayStart = DateTime(day.year, day.month, day.day);
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
+  return start.isBefore(dayEnd) && end.isAfter(dayStart);
+}
+
+DateTime taskVisibleStartOnDay(PlanoTask task, DateTime day) {
+  final start = task.scheduledStart!;
+  final dayStart = DateTime(day.year, day.month, day.day);
+  return start.isBefore(dayStart) ? dayStart : start;
+}
+
+DateTime taskVisibleEndOnDay(PlanoTask task, DateTime day) {
+  final end = task.scheduledEnd!;
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
+  return end.isAfter(dayEnd) ? dayEnd : end;
+}
+
+int taskDurationOnDay(PlanoTask task, DateTime day) {
+  if (!taskOverlapsDay(task, day)) return 0;
+  return taskVisibleEndOnDay(
+    task,
+    day,
+  ).difference(taskVisibleStartOnDay(task, day)).inMinutes;
+}
 
 String _formatTime(DateTime dateTime) =>
     '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';

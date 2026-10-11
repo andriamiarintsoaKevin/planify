@@ -7,14 +7,18 @@ extension _PlanoTodayScreen on _PlanoAppState {
             .where(
               (task) =>
                   task.status == TaskStatus.scheduled &&
-                  task.scheduledStart != null &&
-                  _sameDay(task.scheduledStart!, _selectedDate),
+                  taskOverlapsDay(task, _selectedDate),
             )
             .toList()
-          ..sort((a, b) => a.scheduledStart!.compareTo(b.scheduledStart!));
+          ..sort(
+            (a, b) => taskVisibleStartOnDay(
+              a,
+              _selectedDate,
+            ).compareTo(taskVisibleStartOnDay(b, _selectedDate)),
+          );
     final totalMinutes = scheduled.fold<int>(
       0,
-      (sum, task) => sum + (task.durationMinutes ?? 0),
+      (sum, task) => sum + taskDurationOnDay(task, _selectedDate),
     );
     final load = (totalMinutes / (24 * 60)).clamp(0.0, 1.0);
     final dateLabel = _selectedDate == _dateOnly(DateTime.now())
@@ -34,11 +38,13 @@ extension _PlanoTodayScreen on _PlanoAppState {
                       children: [
                         Text(
                           dateLabel,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 12,
                             letterSpacing: 1,
                             fontWeight: FontWeight.w600,
-                            color: _muted,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -91,7 +97,9 @@ extension _PlanoTodayScreen on _PlanoAppState {
                   ),
                   Text(
                     '${scheduled.length} tâches',
-                    style: const TextStyle(color: _muted),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 ],
               ),
@@ -133,9 +141,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
         final isSelected = _sameDay(date, _selectedDate);
         final hasTasks = _tasks.any(
           (task) =>
-              task.scheduledStart != null &&
-              _sameDay(task.scheduledStart!, date) &&
-              task.status != TaskStatus.done,
+              task.status != TaskStatus.done && taskOverlapsDay(task, date),
         );
         return Expanded(
           child: InkWell(
@@ -147,7 +153,10 @@ extension _PlanoTodayScreen on _PlanoAppState {
                 children: [
                   Text(
                     const ['L', 'M', 'M', 'J', 'V', 'S', 'D'][index],
-                    style: const TextStyle(color: _muted, fontSize: 12),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 7),
                   Container(
@@ -162,7 +171,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
                       '${date.day}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: isSelected ? Colors.white : null,
+                        color: const Color.fromARGB(255, 104, 129, 150),
                       ),
                     ),
                   ),
@@ -201,7 +210,9 @@ extension _PlanoTodayScreen on _PlanoAppState {
                   CircularProgressIndicator(
                     value: load,
                     strokeWidth: 7,
-                    backgroundColor: _primarySoft,
+                    backgroundColor: Theme.of(context)
+                        .colorScheme
+                        .primaryContainer,
                     color: load >= 1 ? _warning : _primary,
                   ),
                   Text(
@@ -246,9 +257,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
     const dayStartHour = 0;
     const hourHeight = 72.0;
     final dayStart = _atTime(_selectedDate, dayStartHour, 0);
-    final overlappingTasks = scheduled
-        .where(_hasScheduleConflict)
-        .toList();
+    final overlappingTasks = scheduled.where(_hasScheduleConflict).toList();
     final overlapLaneByTaskId = <String, int>{};
     var overlapLaneCount = 1;
     for (final task in overlappingTasks) {
@@ -290,9 +299,11 @@ extension _PlanoTodayScreen on _PlanoAppState {
                           width: 42,
                           child: Text(
                             '${(dayStartHour + hour).toString().padLeft(2, '0')}:00',
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
-                              color: _muted,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -300,7 +311,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
                         Expanded(
                           child: Container(
                             height: 1,
-                            color: const Color(0xFFEDEEF2),
+                            color: Theme.of(context).dividerColor,
                           ),
                         ),
                       ],
@@ -313,13 +324,15 @@ extension _PlanoTodayScreen on _PlanoAppState {
                     dayStart: dayStart,
                     left: 54,
                     width: timelineWidth,
-                    color: const Color(0xFFE5E7EB),
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
                     child: Row(
                       children: [
-                        const Icon(
+                        Icon(
                           Icons.event_outlined,
                           size: 15,
-                          color: _muted,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -327,9 +340,10 @@ extension _PlanoTodayScreen on _PlanoAppState {
                             '${event.title} · ${_clock(event.start)}–${_clock(event.end)}',
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w600,
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ),
@@ -339,12 +353,13 @@ extension _PlanoTodayScreen on _PlanoAppState {
                 for (final task in scheduled)
                   if (task.scheduledStart != null &&
                       task.scheduledEnd != null &&
-                      _sameDay(task.scheduledStart!, _selectedDate))
+                      taskOverlapsDay(task, _selectedDate))
                     _positionedTimelineBlock(
-                      start: task.scheduledStart!,
-                      duration: (task.durationMinutes ?? 30),
+                      start: taskVisibleStartOnDay(task, _selectedDate),
+                      duration: taskDurationOnDay(task, _selectedDate),
                       dayStart: dayStart,
-                      left: 54 +
+                      left:
+                          54 +
                           (overlapLaneByTaskId.containsKey(task.id)
                               ? overlapLaneByTaskId[task.id]! *
                                     timelineWidth /
@@ -353,9 +368,8 @@ extension _PlanoTodayScreen on _PlanoAppState {
                       width: overlapLaneByTaskId.containsKey(task.id)
                           ? timelineWidth / overlapLaneCount
                           : timelineWidth,
-                      color: _isTaskPast(task)
-                          ? _muted.withValues(alpha: 0.12)
-                          : _projectColor(task.project).withValues(alpha: 0.13),
+                      color: _priorityColor(context, task.priority),
+                      isTaskBubble: true,
                       child: Opacity(
                         opacity: _isTaskPast(task) ? 0.45 : 1,
                         child: InkWell(
@@ -365,59 +379,84 @@ extension _PlanoTodayScreen on _PlanoAppState {
                           onLongPress: _isTaskPast(task)
                               ? null
                               : () => _toggleTaskLock(task),
-                          child: Row(
-                          children: [
-                            Container(
-                              width: 4,
-                              decoration: BoxDecoration(
-                                color: _projectColor(task.project),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 9,
+                              vertical: 5,
                             ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Text(
-                                    task.title,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  if ((task.durationMinutes ?? 30) >= 45)
-                                    Text(
-                                      '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)}'
-                                      '${task.project.isEmpty ? '' : ' · ${task.project}'}',
-                                      style: const TextStyle(
-                                        fontSize: 10,
-                                        color: _muted,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Row(
+                                  children: [
+                                    if (task.scheduledStart!.isBefore(
+                                      taskVisibleStartOnDay(
+                                        task,
+                                        _selectedDate,
+                                      ),
+                                    ))
+                                      Padding(
+                                        padding: EdgeInsets.only(right: 4),
+                                        child: Icon(
+                                          Icons.subdirectory_arrow_right,
+                                          size: 13,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    Expanded(
+                                      child: Text(
+                                        task.title,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: Color.fromARGB(
+                                            255,
+                                            47,
+                                            43,
+                                            43,
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                ],
-                              ),
-                            ),
-                            if (task.isLocked)
-                              const Icon(
-                                Icons.lock_outline,
-                                size: 15,
-                                color: _muted,
-                              ),
-                            if (_hasScheduleConflict(task))
-                              const Tooltip(
-                                message: 'Cette tâche chevauche une autre tâche',
-                                child: Icon(
-                                  Icons.warning_amber_rounded,
-                                  size: 17,
-                                  color: _danger,
+                                    if (task.isLocked)
+                                      Padding(
+                                        padding: EdgeInsets.only(left: 4),
+                                        child: Icon(
+                                          Icons.lock_outline,
+                                          size: 13,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    if (_hasScheduleConflict(task))
+                                      const Padding(
+                                        padding: EdgeInsets.only(left: 3),
+                                        child: Icon(
+                                          Icons.warning_amber_rounded,
+                                          size: 15,
+                                          color: _danger,
+                                        ),
+                                      ),
+                                  ],
                                 ),
-                              ),
-                          ],
-                        ),
+                                if (taskDurationOnDay(task, _selectedDate) >=
+                                    40)
+                                  Text(
+                                    _taskTimeRangeOnDay(task, _selectedDate),
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: Color.fromARGB(255, 47, 43, 43),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
                         ),
                       ),
                     ),
@@ -454,6 +493,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
     required double width,
     required Color color,
     required Widget child,
+    bool isTaskBubble = false,
   }) {
     final top = taskTopOffset(start, dayStart);
     final height = taskHeight(duration);
@@ -463,11 +503,34 @@ extension _PlanoTodayScreen on _PlanoAppState {
       width: width,
       height: height,
       child: Container(
-        margin: const EdgeInsets.only(right: 4, bottom: 2),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        margin: EdgeInsets.only(
+          left: isTaskBubble ? 3 : 0,
+          right: 4,
+          top: isTaskBubble ? 2 : 0,
+          bottom: 2,
+        ),
         decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(8),
+          color: isTaskBubble
+              ? Theme.of(context).brightness == Brightness.dark
+                    ? Theme.of(context).colorScheme.surfaceContainer
+                    : Color.alphaBlend(
+                        color.withValues(alpha: .1),
+                        Theme.of(context).colorScheme.surface,
+                      )
+              : color,
+          border: isTaskBubble
+              ? Border.all(color: color.withValues(alpha: 0.75))
+              : null,
+          borderRadius: BorderRadius.circular(isTaskBubble ? 14 : 8),
+          boxShadow: isTaskBubble
+              ? [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.2),
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
         ),
         child: child,
       ),
@@ -476,7 +539,10 @@ extension _PlanoTodayScreen on _PlanoAppState {
 
   Widget _eventTile(FixedEvent event) => Card(
     child: ListTile(
-      leading: const Icon(Icons.event_available_outlined, color: _muted),
+      leading: Icon(
+        Icons.event_available_outlined,
+        color: Theme.of(context).colorScheme.onSurfaceVariant,
+      ),
       title: Text(event.title),
       subtitle: Text('${_clock(event.start)}–${_clock(event.end)} · Fixe'),
       dense: true,

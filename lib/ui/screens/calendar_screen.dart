@@ -7,11 +7,15 @@ extension _PlanoCalendarScreen on _PlanoAppState {
             .where(
               (task) =>
                   task.status == TaskStatus.scheduled &&
-                  task.scheduledStart != null &&
-                  _sameDay(task.scheduledStart!, _selectedDate),
+                  taskOverlapsDay(task, _selectedDate),
             )
             .toList()
-          ..sort((a, b) => a.scheduledStart!.compareTo(b.scheduledStart!));
+          ..sort(
+            (a, b) => taskVisibleStartOnDay(
+              a,
+              _selectedDate,
+            ).compareTo(taskVisibleStartOnDay(b, _selectedDate)),
+          );
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -46,7 +50,7 @@ extension _PlanoCalendarScreen on _PlanoAppState {
             for (final task in scheduled)
               Card(
                 color: _isTaskPast(task)
-                    ? _muted.withValues(alpha: 0.08)
+                    ? Theme.of(context).colorScheme.surfaceContainer
                     : null,
                 child: Opacity(
                   opacity: _isTaskPast(task) ? 0.45 : 1,
@@ -55,13 +59,13 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                       width: 4,
                       height: 42,
                       decoration: BoxDecoration(
-                        color: _projectColor(task.project),
+                        color: _priorityColor(context, task.priority),
                         borderRadius: BorderRadius.circular(4),
                       ),
                     ),
                     title: Text(task.title),
                     subtitle: Text(
-                      '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)}'
+                      '${_taskTimeRangeOnDay(task, _selectedDate)}'
                       '${task.project.isEmpty ? '' : ' · ${task.project}'}',
                     ),
                     trailing: Row(
@@ -91,10 +95,13 @@ extension _PlanoCalendarScreen on _PlanoAppState {
               ),
           ],
           const SizedBox(height: 12),
-          const Center(
+          Center(
             child: Text(
               'Aucun calendrier connecté',
-              style: TextStyle(fontSize: 12, color: _muted),
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

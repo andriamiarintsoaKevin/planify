@@ -20,6 +20,59 @@ void main() {
     prioritizeHighPriority: prioritizeHighPriority,
   );
 
+  test('la deadline détermine la fin du créneau planifié', () {
+    final start = DateTime(2026, 10, 11, 16);
+    final deadline = DateTime(2026, 10, 12, 6, 30);
+
+    expect(
+      scheduledEndForTask(
+        start: start,
+        deadline: deadline,
+        durationMinutes: 30,
+      ),
+      deadline,
+    );
+    expect(deadline.difference(start).inMinutes, 14 * 60 + 30);
+  });
+
+  test('découpe un créneau de nuit entre ses deux journées', () {
+    final task = PlanoTask(
+      id: 'night',
+      title: 'Tâche de nuit',
+      status: TaskStatus.scheduled,
+      scheduledStart: DateTime(2026, 10, 11, 23),
+      scheduledEnd: DateTime(2026, 10, 12, 6),
+    );
+
+    expect(taskOverlapsDay(task, DateTime(2026, 10, 11)), isTrue);
+    expect(taskOverlapsDay(task, DateTime(2026, 10, 12)), isTrue);
+    expect(taskDurationOnDay(task, DateTime(2026, 10, 11)), 60);
+    expect(taskDurationOnDay(task, DateTime(2026, 10, 12)), 6 * 60);
+    expect(
+      taskVisibleStartOnDay(task, DateTime(2026, 10, 12)),
+      DateTime(2026, 10, 12),
+    );
+    expect(
+      taskVisibleEndOnDay(task, DateTime(2026, 10, 11)),
+      DateTime(2026, 10, 12),
+    );
+  });
+
+  test('ne planifie aucune tâche avant le début futur de la journée', () {
+    final start = at(16);
+    final result = generatePlan(
+      tasks: const [PlanoTask(id: 'future', title: 'Tâche future')],
+      fixedEvents: [],
+      settings: PlanSettings(
+        dayStart: start,
+        dayEnd: DateTime(day.year, day.month, day.day + 1),
+      ),
+    );
+
+    expect(result.placements.single.start.isBefore(start), isFalse);
+    expect(result.placements.single.start, start);
+  });
+
   test('place les tâches sans chevaucher les événements ni la pause', () {
     final result = generatePlan(
       tasks: [
@@ -105,6 +158,34 @@ void main() {
     expect(result.placements.single.task.id, 'new');
     expect(result.placements.single.start, at(1));
     expect(result.unplaced, isEmpty);
+  });
+
+  test('ne planifie pas après la fin de la journée', () {
+    final lockedTomorrow = PlanoTask(
+      id: 'locked-tomorrow',
+      title: 'Créneau du lendemain',
+      status: TaskStatus.scheduled,
+      scheduledStart: DateTime(day.year, day.month, day.day + 1, 10),
+      scheduledEnd: DateTime(day.year, day.month, day.day + 1, 11),
+      isLocked: true,
+    );
+    final result = generatePlan(
+      tasks: [
+        lockedTomorrow,
+        const PlanoTask(
+          id: 'new',
+          title: 'Nouvelle tâche',
+          durationMinutes: 60,
+        ),
+      ],
+      fixedEvents: [
+        FixedEvent(title: 'Événement', start: day, end: at(23, 30)),
+      ],
+      settings: settings(),
+    );
+
+    expect(result.placements, isEmpty);
+    expect(result.unplaced.map((task) => task.id), ['new']);
   });
 
   test('planifie de minuit à minuit lorsque les règles sont désactivées', () {
@@ -207,7 +288,10 @@ void main() {
 
     expect(isTaskPast(task, at(9, 59)), isFalse);
     expect(isTaskPast(task, at(10)), isTrue);
-    expect(isTaskPast(task.copyWith(status: TaskStatus.inbox), at(11)), isFalse);
+    expect(
+      isTaskPast(task.copyWith(status: TaskStatus.inbox), at(11)),
+      isFalse,
+    );
   });
 
   test('n’impose pas la priorité haute sans activer cette règle', () {

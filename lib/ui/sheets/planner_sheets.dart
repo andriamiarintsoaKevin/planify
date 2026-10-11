@@ -39,7 +39,7 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
                   width: 38,
                   height: 4,
                   decoration: BoxDecoration(
-                    color: _border,
+                    color: Theme.of(context).colorScheme.outlineVariant,
                     borderRadius: BorderRadius.circular(6),
                   ),
                 ),
@@ -52,12 +52,16 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
               const SizedBox(height: 8),
               Text(
                 '${widget.taskCount} tâches · ${hours}h ${minutes}min · ${widget.fixedCount} événement fixe',
-                style: const TextStyle(color: _muted),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 16),
-              const Text(
+              Text(
                 'Les 24 heures sont disponibles. Active uniquement les règles que tu souhaites appliquer.',
-                style: TextStyle(color: _muted),
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 8),
               SwitchListTile(
@@ -102,10 +106,13 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
                 child: const Text('Générer le plan'),
               ),
               const SizedBox(height: 8),
-              const Center(
+              Center(
                 child: Text(
                   'Le plan est généré automatiquement sur cet appareil.',
-                  style: TextStyle(fontSize: 12, color: _muted),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
                 ),
               ),
             ],
@@ -154,20 +161,23 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: const Color(0xFFE8F8F1),
+              color: Theme.of(context).colorScheme.tertiaryContainer,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
               children: [
-                const Icon(Icons.check_circle_outline, color: _success),
+                Icon(
+                  Icons.check_circle_outline,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.result.unplaced.isEmpty
                         ? 'Tout est dans les temps'
                         : '${placements.length} tâches placées, ${widget.result.unplaced.length} à revoir',
-                    style: const TextStyle(
-                      color: Color(0xFF087A55),
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.onTertiaryContainer,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -188,7 +198,7 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
                   width: 5,
                   height: 42,
                   decoration: BoxDecoration(
-                    color: _projectColor(placement.task.project),
+                    color: _priorityColor(context, placement.task.priority),
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
@@ -198,8 +208,8 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
                 ),
                 subtitle: Text(
                   '${_clock(placement.start)}–${_clock(placement.end)}'
-                  '${placement.task.project.isEmpty ? '' : ' · ${placement.task.project}'}'
-                  '${placement.task.durationMinutes == null ? ' · durée estimée' : ''}',
+                  ' · ${_priorityLabel(placement.task.priority)}'
+                  '${placement.task.project.isEmpty ? '' : ' · ${placement.task.project}'}',
                 ),
                 trailing: IconButton(
                   tooltip: _lockedIds.contains(placement.task.id)
@@ -216,7 +226,7 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
                         : Icons.lock_open_outlined,
                     color: _lockedIds.contains(placement.task.id)
                         ? _primary
-                        : _muted,
+                        : Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
               ),
@@ -226,16 +236,16 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: const Color(0xFFFFF4DE),
+                color: Theme.of(context).colorScheme.errorContainer,
                 borderRadius: BorderRadius.circular(14),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
+                  Text(
                     'Ces tâches ne rentrent pas',
                     style: TextStyle(
-                      color: Color(0xFF9A5B00),
+                      color: Theme.of(context).colorScheme.onErrorContainer,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -257,13 +267,20 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
           const SizedBox(height: 14),
           Card(
             child: ExpansionTile(
-              leading: const Icon(Icons.lightbulb_outline, color: _primary),
+              leading: Icon(
+                Icons.lightbulb_outline,
+                color: Theme.of(context).colorScheme.primary,
+              ),
               title: const Text('Pourquoi ce plan ?'),
               children: [
                 for (final reason in widget.result.explanations)
                   ListTile(
                     dense: true,
-                    leading: const Icon(Icons.check, color: _success, size: 18),
+                    leading: Icon(
+                      Icons.check,
+                      color: Theme.of(context).colorScheme.tertiary,
+                      size: 18,
+                    ),
                     title: Text(reason, style: const TextStyle(fontSize: 13)),
                   ),
                 if (widget.result.explanations.isEmpty)
@@ -279,9 +296,9 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
           for (final event in widget.events)
             Card(
               child: ListTile(
-                leading: const Icon(
+                leading: Icon(
                   Icons.event_available_outlined,
-                  color: _muted,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
                 ),
                 title: Text(event.title),
                 subtitle: Text(

@@ -14,9 +14,12 @@ extension _PlanoSettingsScreen on _PlanoAppState {
         children: [
           Card(
             child: ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: _primarySoft,
-                child: Icon(Icons.person_outline, color: _primary),
+              leading: CircleAvatar(
+                backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                child: Icon(
+                  Icons.person_outline,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
               ),
               title: const Text(
                 'Mon espace',

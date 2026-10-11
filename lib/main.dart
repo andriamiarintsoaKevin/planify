@@ -30,9 +30,7 @@ const _success = Color(0xFF10B981);
 const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFEF4444);
 const _ink = Color(0xFF111827);
-const _muted = Color(0xFF6B7280);
 const _canvas = Color(0xFFF7F7FB);
-const _border = Color(0xFFE5E7EB);
 
 class PlanoApp extends StatefulWidget {
   const PlanoApp({super.key, this.repository});
@@ -274,15 +272,41 @@ class _PlanoAppState extends State<PlanoApp> {
 
   Future<void> _openPlannerSetup({PlanoTask? onlyTask}) async {
     final selectedTasks = <PlanoTask>[];
+    final date = _dateOnly(_selectedDate);
+    final now = DateTime.now();
+    final today = _dateOnly(now);
+    if (date.isBefore(today)) {
+      _showMessage('Impossible de planifier une tâche à une date passée');
+      return;
+    }
+    final dayStart = _sameDay(date, today)
+        ? DateTime(
+            now.year,
+            now.month,
+            now.day,
+            now.hour,
+            now.minute,
+          ).add(
+            Duration(
+              minutes: now.second > 0 ||
+                      now.millisecond > 0 ||
+                      now.microsecond > 0
+                  ? 1
+                  : 0,
+            ),
+          )
+        : date;
+    if (!dayStart.isBefore(_atTime(date, 24, 0))) {
+      _showMessage('Aucun horaire futur ne reste pour cette journée');
+      return;
+    }
     if (onlyTask == null) {
       selectedTasks.addAll(
         _tasks.where(
           (task) =>
-              task.status == TaskStatus.inbox ||
-              (task.status == TaskStatus.scheduled &&
-                  !_isTaskPast(task) &&
-                  task.scheduledStart != null &&
-                  _sameDay(task.scheduledStart!, _selectedDate)),
+              task.status == TaskStatus.inbox &&
+              task.scheduledStart == null &&
+              task.scheduledEnd == null,
         ),
       );
     } else {
@@ -294,24 +318,32 @@ class _PlanoAppState extends State<PlanoApp> {
         _showMessage('Cette tâche est verrouillée à son horaire actuel');
         return;
       }
+      if (onlyTask.status != TaskStatus.inbox ||
+          onlyTask.scheduledStart != null ||
+          onlyTask.scheduledEnd != null) {
+        _showMessage('Seules les tâches sans horaire peuvent être réorganisées');
+        return;
+      }
       selectedTasks.add(onlyTask);
-      selectedTasks.addAll(
-        _tasks.where(
-          (task) =>
-              task.isLocked &&
-              task.status == TaskStatus.scheduled &&
-              !_isTaskPast(task) &&
-              task.scheduledStart != null &&
-              _sameDay(task.scheduledStart!, _selectedDate) &&
-              task.id != onlyTask.id,
-        ),
-      );
     }
     if (selectedTasks.isEmpty) {
       _showMessage('Aucune tâche à planifier dans l’Inbox');
       return;
     }
-    final date = _dateOnly(_selectedDate);
+    final planningEvents = [
+      ..._events,
+      for (final task in _tasks)
+        if (task.status == TaskStatus.scheduled &&
+            task.scheduledStart != null &&
+            task.scheduledEnd != null &&
+            task.scheduledEnd!.isAfter(date) &&
+            task.scheduledStart!.isBefore(_atTime(date, 24, 0)))
+          FixedEvent(
+            title: task.title,
+            start: task.scheduledStart!,
+            end: task.scheduledEnd!,
+          ),
+    ];
     while (mounted) {
       final options = await showModalBottomSheet<_PlannerOptions>(
         context: _appContext!,
@@ -323,15 +355,15 @@ class _PlanoAppState extends State<PlanoApp> {
             0,
             (sum, task) => sum + (task.durationMinutes ?? 30),
           ),
-          fixedCount: _events.length,
+          fixedCount: planningEvents.length,
         ),
       );
       if (options == null || !mounted) return;
       final result = generatePlan(
         tasks: selectedTasks,
-        fixedEvents: _events,
+        fixedEvents: planningEvents,
         settings: PlanSettings(
-          dayStart: date,
+          dayStart: dayStart,
           dayEnd: _atTime(date, 24, 0),
           lunchStart: options.respectLunch ? _atTime(date, 12, 30) : null,
           lunchEnd: options.respectLunch ? _atTime(date, 13, 30) : null,
@@ -344,7 +376,7 @@ class _PlanoAppState extends State<PlanoApp> {
           builder: (context) => _PlanPreviewPage(
             result: result,
             selectedDate: _selectedDate,
-            events: _events,
+            events: planningEvents,
           ),
         ),
       );
@@ -488,7 +520,10 @@ class _PlanoAppState extends State<PlanoApp> {
             Text(
               message,
               textAlign: TextAlign.center,
-              style: const TextStyle(color: _muted, height: 1.4),
+              style: TextStyle(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                height: 1.4,
+              ),
             ),
           ],
         ),

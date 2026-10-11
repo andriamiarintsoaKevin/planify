@@ -21,7 +21,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
             child: Center(
               child: _badge(
                 '${inbox.length} à planifier',
-                _primarySoft,
+                Theme.of(context).colorScheme.primaryContainer,
                 _primary,
               ),
             ),
@@ -37,8 +37,8 @@ extension _PlanoInboxScreen on _PlanoAppState {
               child: Text(
                 'Les tâches capturées restent ici jusqu’à leur planification.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _muted,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
@@ -106,9 +106,11 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       ),
                     ),
                     const SizedBox(height: 5),
-                    const Text(
+                    Text(
                       'Aperçu avant validation',
-                      style: TextStyle(fontSize: 12, color: _muted),
+                      style: const TextStyle(fontSize: 12).copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -121,8 +123,13 @@ extension _PlanoInboxScreen on _PlanoAppState {
 
   Widget _taskCard(PlanoTask task) {
     final projectColor = _projectColor(task.project);
+    final priorityColor = _priorityColor(context, task.priority);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: priorityColor.withValues(alpha: .65)),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => _showTaskEditor(task: task),
@@ -134,7 +141,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
                 width: 9,
                 height: 9,
                 decoration: BoxDecoration(
-                  color: projectColor,
+                  color: priorityColor,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -158,24 +165,28 @@ extension _PlanoInboxScreen on _PlanoAppState {
                             projectColor.withValues(alpha: .12),
                             projectColor,
                           ),
-                        _badge(_priorityLabel(task.priority), _canvas, _muted),
+                        _badge(
+                          _priorityLabel(task.priority),
+                          _priorityTint(context, task.priority),
+                          priorityColor,
+                        ),
                         if (task.durationMinutes == null)
                           _badge(
                             'Durée manquante',
-                            const Color(0xFFFFF4DE),
-                            _warning,
+                            _priorityTint(context, TaskPriority.high),
+                            _priorityColor(context, TaskPriority.high),
                           ),
                         if (task.durationMinutes != null)
                           _badge(
                             _durationLabel(task.durationMinutes!),
-                            _canvas,
-                            _muted,
+                            Theme.of(context).colorScheme.surfaceContainer,
+                            Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         if (task.deadline != null)
                           _badge(
                             'Avant ${_clock(task.deadline!)}',
-                            const Color(0xFFFFF4DE),
-                            _warning,
+                            _priorityTint(context, TaskPriority.high),
+                            _priorityColor(context, TaskPriority.high),
                           ),
                       ],
                     ),

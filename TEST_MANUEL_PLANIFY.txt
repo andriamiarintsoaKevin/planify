@@ -34,7 +34,7 @@ AVANT DE COMMENCER
 1. Toucher la tâche créée pour ouvrir son formulaire.
 2. Choisir « Planifier le » puis sélectionner une date et une heure.
 3. Ajouter un projet facultatif, par exemple « Projet personnel ».
-4. Modifier sa durée, sa priorité et ses notes, puis enregistrer.
+4. Modifier sa deadline, sa priorité et ses notes, puis enregistrer.
 5. Vérifier que la tâche apparaît au créneau choisi.
 6. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
    vide.
@@ -44,31 +44,39 @@ AVANT DE COMMENCER
 
 4. PRÉVISUALISER ET VALIDER UN PLAN
 -----------------------------------
-1. Créer une tâche d’au moins 30 minutes avec une durée estimée.
+1. Créer une tâche dans l’Inbox sans lui attribuer d’horaire.
 2. Dans l’Inbox, choisir « Planifier automatiquement ».
 3. Générer le plan et vérifier que l’écran d’aperçu affiche la tâche et un
-   créneau.
+   créneau futur.
 4. Valider le plan.
 5. Vérifier que la tâche apparaît dans « Aujourd’hui » et dans « Calendrier ».
 6. Utiliser « Annuler » si l’action est proposée et vérifier que la tâche
    retourne dans l’Inbox.
+7. Vérifier que les horaires déjà fixés restent inchangés et que les créneaux
+   passés ne sont pas proposés.
 
 5. TESTER UNE DEADLINE ET LES RÉGLAGES
 --------------------------------------
 1. Créer ou modifier une tâche et lui attribuer une deadline future.
 2. Générer un plan et vérifier que l’horaire proposé tient compte de l’échéance.
-3. Vérifier que pause déjeuner, marge et priorité haute sont désactivées par
+3. Pour une tâche planifiée le 11/10/2026 à 16:00 avec une deadline le
+   12/10/2026 à 06:30, vérifier que le créneau se termine à 06:30.
+4. Vérifier que pause déjeuner, marge et priorité haute sont désactivées par
    défaut.
-4. Générer un plan en laissant ces règles désactivées : elles ne doivent pas
+5. Générer un plan en laissant ces règles désactivées : elles ne doivent pas
    modifier les créneaux.
-5. Recommencer en activant une règle et vérifier que seule cette règle est
+6. Recommencer en activant une règle et vérifier que seule cette règle est
    appliquée.
-6. Activer puis désactiver le thème sombre.
+7. Activer puis désactiver le thème sombre.
+8. En thème sombre, ouvrir le formulaire et vérifier que les champs, panneaux
+   et textes restent lisibles, sans fond blanc.
+9. Vérifier les couleurs distinctes des priorités basse, normale et haute dans
+   l’Inbox, le planning, le calendrier et l’aperçu.
 
 6. VÉRIFIER LA DURÉE DES DONNÉES
 --------------------------------
-1. Ajouter une tâche et remplir plusieurs champs : notes, projet, durée,
-   priorité et deadline.
+1. Ajouter une tâche et remplir plusieurs champs : notes, projet, priorité et
+   deadline.
 2. Enregistrer la tâche et modifier le thème.
 3. Fermer complètement puis relancer l’application.
 4. Vérifier que la tâche, tous ses champs et les réglages sont conservés.

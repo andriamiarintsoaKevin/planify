@@ -35,7 +35,10 @@ class _QuickCaptureState extends State<_QuickCapture> {
         hintText: 'Ajouter une tâche… ex. Appeler Léa demain',
         filled: true,
         fillColor: Theme.of(context).colorScheme.surface,
-        prefixIcon: const Icon(Icons.add_task_outlined, color: _muted),
+        prefixIcon: Icon(
+          Icons.add_task_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         suffixIcon: IconButton(
           onPressed: _submit,
           tooltip: 'Ajouter',
@@ -47,11 +50,15 @@ class _QuickCaptureState extends State<_QuickCapture> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
       ),
     );
@@ -128,7 +135,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _border,
+                  color: Theme.of(context).colorScheme.outlineVariant,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -175,27 +182,8 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             TextFormField(
               initialValue: _project,
               textCapitalization: TextCapitalization.words,
-              decoration: _inputDecoration('Facultatif'),
+              decoration: _inputDecoration('Facultatif', context),
               onChanged: (value) => _project = value.trim(),
-            ),
-            const SizedBox(height: 20),
-            const _FieldLabel('Durée estimée'),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final duration in [15, 30, 45, 60, 120])
-                  ChoiceChip(
-                    label: Text(_durationLabel(duration)),
-                    selected: _duration == duration,
-                    onSelected: (_) => setState(() => _duration = duration),
-                  ),
-                ChoiceChip(
-                  label: const Text('Sans durée'),
-                  selected: _duration == null,
-                  onSelected: (_) => setState(() => _duration = null),
-                ),
-              ],
             ),
             const SizedBox(height: 20),
             const _FieldLabel('Planifier le'),
@@ -246,6 +234,16 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                 ),
               ),
             ),
+            if (_deadline != null && _scheduledStart != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Le créneau se terminera à la deadline.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             if (_deadline != null)
               Align(
                 alignment: Alignment.centerLeft,
@@ -290,7 +288,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
               controller: _notes,
               minLines: 2,
               maxLines: 4,
-              decoration: _inputDecoration('Ajouter des détails…'),
+              decoration: _inputDecoration('Ajouter des détails…', context),
             ),
             if (editing) ...[
               const SizedBox(height: 18),
@@ -332,15 +330,18 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       ),
     );
     if (time != null) {
-      setState(
-        () => _deadline = DateTime(
-          selected.year,
-          selected.month,
-          selected.day,
-          time.hour,
-          time.minute,
-        ),
+      final deadline = DateTime(
+        selected.year,
+        selected.month,
+        selected.day,
+        time.hour,
+        time.minute,
       );
+      if (_scheduledStart != null && !deadline.isAfter(_scheduledStart!)) {
+        _showFormMessage('La deadline doit être après le début de la tâche');
+        return;
+      }
+      setState(() => _deadline = deadline);
     }
   }
 
@@ -376,8 +377,16 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       _showFormMessage('Choisissez une date et une heure à venir');
       return;
     }
-    final end = start.add(Duration(minutes: _duration ?? 30));
-    if (end.isAfter(_atTime(selectedDate, 24, 0))) {
+    if (_deadline != null && !_deadline!.isAfter(start)) {
+      _showFormMessage('La deadline doit être après le début de la tâche');
+      return;
+    }
+    final end = scheduledEndForTask(
+      start: start,
+      deadline: _deadline,
+      durationMinutes: _duration,
+    )!;
+    if (_deadline == null && end.isAfter(_atTime(selectedDate, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
     }
@@ -391,12 +400,20 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       return;
     }
     final old = widget.task;
-    final durationMinutes = _duration ?? 30;
-    final scheduledEnd = _scheduledStart?.add(
-      Duration(minutes: durationMinutes),
+    if (_scheduledStart != null &&
+        _deadline != null &&
+        !_deadline!.isAfter(_scheduledStart!)) {
+      _showFormMessage('La deadline doit être après le début de la tâche');
+      return;
+    }
+    final scheduledEnd = scheduledEndForTask(
+      start: _scheduledStart,
+      deadline: _deadline,
+      durationMinutes: _duration,
     );
-    if (scheduledEnd != null &&
-        scheduledEnd.isAfter(_atTime(_scheduledStart!, 24, 0))) {
+    if (_scheduledStart != null &&
+        _deadline == null &&
+        scheduledEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
     }
@@ -407,7 +424,9 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
           id: old?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
           title: title,
           notes: _notes.text.trim(),
-          durationMinutes: _duration,
+          durationMinutes: scheduledEnd == null
+              ? _duration
+              : scheduledEnd.difference(_scheduledStart!).inMinutes,
           priority: _priority,
           deadline: _deadline,
           status: _scheduledStart != null
@@ -420,8 +439,8 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
           project: _project,
           isLocked: _locked && _scheduledStart != null,
           isAiProposed: old?.isAiProposed ?? false,
-          isDurationEstimated:
-              _duration == null || (old?.isDurationEstimated ?? false),
+          isDurationEstimated: _duration == null ||
+              (old?.isDurationEstimated ?? false),
         ),
       ),
     );
