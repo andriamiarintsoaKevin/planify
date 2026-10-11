@@ -7,11 +7,15 @@ extension _PlanoCalendarScreen on _PlanoAppState {
             .where(
               (task) =>
                   task.status == TaskStatus.scheduled &&
-                  task.scheduledStart != null &&
-                  _sameDay(task.scheduledStart!, _selectedDate),
+                  taskOverlapsDay(task, _selectedDate),
             )
             .toList()
-          ..sort((a, b) => a.scheduledStart!.compareTo(b.scheduledStart!));
+          ..sort(
+            (a, b) => taskVisibleStartOnDay(
+              a,
+              _selectedDate,
+            ).compareTo(taskVisibleStartOnDay(b, _selectedDate)),
+          );
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -45,31 +49,59 @@ extension _PlanoCalendarScreen on _PlanoAppState {
             for (final event in _events) _eventTile(event),
             for (final task in scheduled)
               Card(
-                child: ListTile(
-                  leading: Container(
-                    width: 4,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: _projectColor(task.project),
-                      borderRadius: BorderRadius.circular(4),
+                color: _isTaskPast(task)
+                    ? Theme.of(context).colorScheme.surfaceContainer
+                    : null,
+                child: Opacity(
+                  opacity: _isTaskPast(task) ? 0.45 : 1,
+                  child: ListTile(
+                    leading: Container(
+                      width: 4,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: _priorityColor(context, task.priority),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
                     ),
+                    title: Text(task.title),
+                    subtitle: Text(
+                      '${_taskTimeRangeOnDay(task, _selectedDate)}'
+                      '${task.project.isEmpty ? '' : ' · ${task.project}'}',
+                    ),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_hasScheduleConflict(task))
+                          const Tooltip(
+                            message: 'Cette tâche chevauche une autre tâche',
+                            child: Icon(
+                              Icons.warning_amber_rounded,
+                              color: _danger,
+                            ),
+                          ),
+                        if (task.isLocked)
+                          const Padding(
+                            padding: EdgeInsets.only(left: 8),
+                            child: Icon(Icons.lock_outline, size: 18),
+                          ),
+                      ],
+                    ),
+                    onTap: _isTaskPast(task)
+                        ? null
+                        : () => _showTaskEditor(task: task),
+                    enabled: !_isTaskPast(task),
                   ),
-                  title: Text(task.title),
-                  subtitle: Text(
-                    '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)} · ${task.project}',
-                  ),
-                  trailing: task.isLocked
-                      ? const Icon(Icons.lock_outline, size: 18)
-                      : null,
-                  onTap: () => _showTaskEditor(task: task),
                 ),
               ),
           ],
           const SizedBox(height: 12),
-          const Center(
+          Center(
             child: Text(
-              'Synchronisation calendrier · démonstration',
-              style: TextStyle(fontSize: 12, color: _muted),
+              'Aucun calendrier connecté',
+              style: TextStyle(
+                fontSize: 12,
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
             ),
           ),
         ],

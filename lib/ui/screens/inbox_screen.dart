@@ -21,7 +21,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
             child: Center(
               child: _badge(
                 '${inbox.length} à planifier',
-                _primarySoft,
+                Theme.of(context).colorScheme.primaryContainer,
                 _primary,
               ),
             ),
@@ -37,8 +37,8 @@ extension _PlanoInboxScreen on _PlanoAppState {
               child: Text(
                 'Les tâches capturées restent ici jusqu’à leur planification.',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: _muted,
-                    ),
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
             ),
           ),
@@ -50,8 +50,8 @@ extension _PlanoInboxScreen on _PlanoAppState {
             child: inbox.isEmpty
                 ? _emptyCard(
                     icon: Icons.check_circle_outline,
-                    title: 'Tout est planifié',
-                    message: 'Les nouvelles idées et tâches apparaîtront ici.',
+                    title: 'Votre Inbox est vide',
+                    message: 'Ajoutez une tâche pour commencer.',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -93,7 +93,9 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       onPressed: _openPlannerSetup,
                       icon: const Icon(Icons.auto_awesome),
                       label: Text(
-                        'Planifier automatiquement les ${inbox.length} tâches',
+                        inbox.length == 1
+                            ? 'Planifier automatiquement la tâche'
+                            : 'Planifier automatiquement les ${inbox.length} tâches',
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: _primary,
@@ -104,9 +106,11 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       ),
                     ),
                     const SizedBox(height: 5),
-                    const Text(
+                    Text(
                       'Aperçu avant validation',
-                      style: TextStyle(fontSize: 12, color: _muted),
+                      style: const TextStyle(fontSize: 12).copyWith(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ],
                 ),
@@ -119,8 +123,13 @@ extension _PlanoInboxScreen on _PlanoAppState {
 
   Widget _taskCard(PlanoTask task) {
     final projectColor = _projectColor(task.project);
+    final priorityColor = _priorityColor(context, task.priority);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: priorityColor.withValues(alpha: .65)),
+      ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
         onTap: () => _showTaskEditor(task: task),
@@ -132,7 +141,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
                 width: 9,
                 height: 9,
                 decoration: BoxDecoration(
-                  color: projectColor,
+                  color: priorityColor,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -150,29 +159,34 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       spacing: 7,
                       runSpacing: 5,
                       children: [
+                        if (task.project.isNotEmpty)
+                          _badge(
+                            task.project,
+                            projectColor.withValues(alpha: .12),
+                            projectColor,
+                          ),
                         _badge(
-                          task.project,
-                          projectColor.withValues(alpha: .12),
-                          projectColor,
+                          _priorityLabel(task.priority),
+                          _priorityTint(context, task.priority),
+                          priorityColor,
                         ),
-                        _badge(_priorityLabel(task.priority), _canvas, _muted),
                         if (task.durationMinutes == null)
                           _badge(
                             'Durée manquante',
-                            const Color(0xFFFFF4DE),
-                            _warning,
+                            _priorityTint(context, TaskPriority.high),
+                            _priorityColor(context, TaskPriority.high),
                           ),
                         if (task.durationMinutes != null)
                           _badge(
                             _durationLabel(task.durationMinutes!),
-                            _canvas,
-                            _muted,
+                            Theme.of(context).colorScheme.surfaceContainer,
+                            Theme.of(context).colorScheme.onSurfaceVariant,
                           ),
                         if (task.deadline != null)
                           _badge(
                             'Avant ${_clock(task.deadline!)}',
-                            const Color(0xFFFFF4DE),
-                            _warning,
+                            _priorityTint(context, TaskPriority.high),
+                            _priorityColor(context, TaskPriority.high),
                           ),
                       ],
                     ),

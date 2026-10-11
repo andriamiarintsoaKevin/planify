@@ -15,7 +15,7 @@ class PlanoTask {
     this.status = TaskStatus.inbox,
     this.scheduledStart,
     this.scheduledEnd,
-    this.project = 'Personnel',
+    this.project = '',
     this.isLocked = false,
     this.isAiProposed = false,
     this.isDurationEstimated = false,
@@ -76,13 +76,11 @@ class FixedEvent {
     required this.title,
     required this.start,
     required this.end,
-    this.isDemo = false,
   });
 
   final String title;
   final DateTime start;
   final DateTime end;
-  final bool isDemo;
 }
 
 class TaskPlacement {
@@ -111,20 +109,35 @@ class PlanResult {
 
 class PlanSettings {
   const PlanSettings({
-    required this.workStart,
-    required this.workEnd,
+    required this.dayStart,
+    required this.dayEnd,
     this.lunchStart,
     this.lunchEnd,
-    this.bufferMinutes = 10,
-    this.difficultTasksInMorning = true,
+    this.bufferMinutes = 0,
+    this.prioritizeHighPriority = false,
   });
 
-  final DateTime workStart;
-  final DateTime workEnd;
+  final DateTime dayStart;
+  final DateTime dayEnd;
   final DateTime? lunchStart;
   final DateTime? lunchEnd;
   final int bufferMinutes;
-  final bool difficultTasksInMorning;
+  final bool prioritizeHighPriority;
+}
+
+DateTime? scheduledEndForTask({
+  required DateTime? start,
+  required DateTime? deadline,
+  required int? durationMinutes,
+}) {
+  if (start == null) return null;
+  if (deadline != null) {
+    if (!deadline.isAfter(start)) {
+      throw ArgumentError.value(deadline, 'deadline', 'Must be after start');
+    }
+    return deadline;
+  }
+  return start.add(Duration(minutes: durationMinutes ?? 30));
 }
 
 PlanResult generatePlan({
@@ -134,24 +147,24 @@ PlanResult generatePlan({
 }) {
   final fixed = <_Interval>[
     for (final event in fixedEvents)
-      if (event.end.isAfter(settings.workStart) &&
-          event.start.isBefore(settings.workEnd))
+      if (event.end.isAfter(settings.dayStart) &&
+          event.start.isBefore(settings.dayEnd))
         _Interval(
-          event.start.isBefore(settings.workStart)
-              ? settings.workStart
+          event.start.isBefore(settings.dayStart)
+              ? settings.dayStart
               : event.start,
-          event.end.isAfter(settings.workEnd) ? settings.workEnd : event.end,
+          event.end.isAfter(settings.dayEnd) ? settings.dayEnd : event.end,
         ),
     if (settings.lunchStart != null &&
         settings.lunchEnd != null &&
-        settings.lunchEnd!.isAfter(settings.workStart) &&
-        settings.lunchStart!.isBefore(settings.workEnd))
+        settings.lunchEnd!.isAfter(settings.dayStart) &&
+        settings.lunchStart!.isBefore(settings.dayEnd))
       _Interval(
-        settings.lunchStart!.isBefore(settings.workStart)
-            ? settings.workStart
+        settings.lunchStart!.isBefore(settings.dayStart)
+            ? settings.dayStart
             : settings.lunchStart!,
-        settings.lunchEnd!.isAfter(settings.workEnd)
-            ? settings.workEnd
+        settings.lunchEnd!.isAfter(settings.dayEnd)
+            ? settings.dayEnd
             : settings.lunchEnd!,
       ),
     for (final task in tasks)
@@ -175,8 +188,10 @@ PlanResult generatePlan({
           final bDeadline = b.deadline ?? DateTime(9999);
           final deadlineOrder = aDeadline.compareTo(bDeadline);
           if (deadlineOrder != 0) return deadlineOrder;
-          final priorityOrder = b.priority.index.compareTo(a.priority.index);
-          if (priorityOrder != 0) return priorityOrder;
+          if (settings.prioritizeHighPriority) {
+            final priorityOrder = b.priority.index.compareTo(a.priority.index);
+            if (priorityOrder != 0) return priorityOrder;
+          }
           return (b.durationMinutes ?? 30).compareTo(a.durationMinutes ?? 30);
         });
 
@@ -188,21 +203,12 @@ PlanResult generatePlan({
     final duration = task.durationMinutes ?? 30;
     final possibleIntervals = _freeIntervals(
       occupied,
-      settings.workStart,
-      settings.workEnd,
+      settings.dayStart,
+      settings.dayEnd,
       settings.bufferMinutes,
     );
     var placementFound = false;
-    final prefersMorning =
-        settings.difficultTasksInMorning && task.priority == TaskPriority.high;
-    final candidates = prefersMorning
-        ? [
-            ...possibleIntervals.where((slot) => slot.start.hour < 12),
-            ...possibleIntervals.where((slot) => slot.start.hour >= 12),
-          ]
-        : possibleIntervals;
-
-    for (final slot in candidates) {
+    for (final slot in possibleIntervals) {
       final candidateStart = slot.start;
       final candidateEnd = candidateStart.add(Duration(minutes: duration));
       if (candidateEnd.isAfter(slot.end)) continue;
@@ -215,12 +221,7 @@ PlanResult generatePlan({
         end: candidateEnd,
       );
       placements.add(placement);
-      occupied.add(
-        _Interval(
-          candidateStart,
-          candidateEnd.add(Duration(minutes: settings.bufferMinutes)),
-        ),
-      );
+      occupied.add(_Interval(candidateStart, candidateEnd));
       occupied.sort((a, b) => a.start.compareTo(b.start));
       placementFound = true;
       break;
@@ -233,7 +234,10 @@ PlanResult generatePlan({
   return PlanResult(
     placements: placements,
     unplaced: unplaced,
-    explanations: _makeExplanations(placements),
+    explanations: _makeExplanations(
+      placements,
+      prioritizeHighPriority: settings.prioritizeHighPriority,
+    ),
   );
 }
 
@@ -248,7 +252,12 @@ List<_Interval> _freeIntervals(
   for (final interval in occupied) {
     if (!interval.end.isAfter(cursor)) continue;
     if (interval.start.isAfter(cursor)) {
-      free.add(_Interval(cursor, interval.start));
+      free.add(
+        _Interval(
+          cursor,
+          interval.start.isBefore(end) ? interval.start : end,
+        ),
+      );
     }
     final bufferedEnd = interval.end.add(Duration(minutes: bufferMinutes));
     if (bufferedEnd.isAfter(cursor)) cursor = bufferedEnd;
@@ -258,7 +267,10 @@ List<_Interval> _freeIntervals(
   return free;
 }
 
-List<String> _makeExplanations(List<TaskPlacement> placements) {
+List<String> _makeExplanations(
+  List<TaskPlacement> placements, {
+  required bool prioritizeHighPriority,
+}) {
   if (placements.isEmpty) return [];
   final explanations = <String>[];
   for (final placement in placements) {
@@ -268,9 +280,11 @@ List<String> _makeExplanations(List<TaskPlacement> placements) {
         '${placement.task.title} est planifiée avant sa deadline de ${_formatTime(deadline)}.',
       );
     }
-    if (placement.task.priority == TaskPriority.high &&
-        placement.start.hour < 12) {
-      explanations.add('${placement.task.title} est placée le matin.');
+    if (prioritizeHighPriority &&
+        placement.task.priority == TaskPriority.high) {
+      explanations.add(
+        '${placement.task.title} a été favorisée en raison de sa priorité.',
+      );
     }
   }
   if (placements.isNotEmpty && explanations.length < 3) {
@@ -288,6 +302,61 @@ List<String> _makeExplanations(List<TaskPlacement> placements) {
     explanations.add(explanation);
   }
   return explanations.take(3).toList();
+}
+
+bool hasScheduleOverlap(PlanoTask task, Iterable<PlanoTask> otherTasks) {
+  final start = task.scheduledStart;
+  final end = task.scheduledEnd;
+  if (task.status != TaskStatus.scheduled || start == null || end == null) {
+    return false;
+  }
+  return otherTasks.any((other) {
+    if (other.id == task.id || other.status != TaskStatus.scheduled) {
+      return false;
+    }
+    final otherStart = other.scheduledStart;
+    final otherEnd = other.scheduledEnd;
+    return otherStart != null &&
+        otherEnd != null &&
+        start.isBefore(otherEnd) &&
+        otherStart.isBefore(end);
+  });
+}
+
+bool isTaskPast(PlanoTask task, DateTime now) =>
+    task.status == TaskStatus.scheduled &&
+    task.scheduledEnd != null &&
+    !task.scheduledEnd!.isAfter(now);
+
+bool taskOverlapsDay(PlanoTask task, DateTime day) {
+  final start = task.scheduledStart;
+  final end = task.scheduledEnd;
+  if (task.status != TaskStatus.scheduled || start == null || end == null) {
+    return false;
+  }
+  final dayStart = DateTime(day.year, day.month, day.day);
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
+  return start.isBefore(dayEnd) && end.isAfter(dayStart);
+}
+
+DateTime taskVisibleStartOnDay(PlanoTask task, DateTime day) {
+  final start = task.scheduledStart!;
+  final dayStart = DateTime(day.year, day.month, day.day);
+  return start.isBefore(dayStart) ? dayStart : start;
+}
+
+DateTime taskVisibleEndOnDay(PlanoTask task, DateTime day) {
+  final end = task.scheduledEnd!;
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
+  return end.isAfter(dayEnd) ? dayEnd : end;
+}
+
+int taskDurationOnDay(PlanoTask task, DateTime day) {
+  if (!taskOverlapsDay(task, day)) return 0;
+  return taskVisibleEndOnDay(
+    task,
+    day,
+  ).difference(taskVisibleStartOnDay(task, day)).inMinutes;
 }
 
 String _formatTime(DateTime dateTime) =>

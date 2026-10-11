@@ -25,17 +25,13 @@ class _SettingsHeader extends StatelessWidget {
       style: const TextStyle(
         fontSize: 14,
         fontWeight: FontWeight.w600,
-        color: _muted,
-      ),
+      ).copyWith(color: Theme.of(context).colorScheme.onSurfaceVariant),
     ),
   );
 }
 
 class _LoadErrorView extends StatelessWidget {
-  const _LoadErrorView({
-    required this.error,
-    required this.onRetry,
-  });
+  const _LoadErrorView({required this.error, required this.onRetry});
 
   final Object error;
   final VoidCallback onRetry;
@@ -58,7 +54,9 @@ class _LoadErrorView extends StatelessWidget {
           Text(
             error.toString(),
             textAlign: TextAlign.center,
-            style: const TextStyle(color: _muted),
+            style: TextStyle(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
           ),
           const SizedBox(height: 16),
           FilledButton.icon(
@@ -82,22 +80,55 @@ class _TaskFormResult {
 class _PlannerOptions {
   const _PlannerOptions({
     required this.respectLunch,
-    required this.difficultMorning,
+    required this.prioritizeHighPriority,
     required this.addBuffer,
   });
 
   final bool respectLunch;
-  final bool difficultMorning;
+  final bool prioritizeHighPriority;
   final bool addBuffer;
 }
 
 class _PlanApproval {
-  const _PlanApproval({required this.lockedTaskIds});
+  const _PlanApproval({required this.lockedTaskIds, this.editOptions = false});
 
   final Set<String> lockedTaskIds;
+  final bool editOptions;
 }
 
-Color _projectColor(String project) => _projectColors[project] ?? _primary;
+const _projectPalette = <Color>[
+  Color(0xFF3B82F6),
+  Color(0xFFEC4899),
+  Color(0xFF22C55E),
+  Color(0xFF8B5CF6),
+  Color(0xFFF97316),
+];
+
+Color _projectColor(String project) {
+  if (project.isEmpty) return _primary;
+  final colorIndex = project.codeUnits.fold<int>(
+    0,
+    (sum, character) => sum + character,
+  );
+  return _projectPalette[colorIndex % _projectPalette.length];
+}
+
+Color _priorityColor(BuildContext context, TaskPriority priority) {
+  final dark = Theme.of(context).brightness == Brightness.dark;
+  return switch (priority) {
+    TaskPriority.low =>
+      dark ? const Color(0xFF57D6B1) : const Color(0xFF07836F),
+    TaskPriority.medium =>
+      dark ? const Color(0xFF9AA5FF) : const Color(0xFF5262D8),
+    TaskPriority.high =>
+      dark ? const Color(0xFFFF8585) : const Color(0xFFC63845),
+  };
+}
+
+Color _priorityTint(BuildContext context, TaskPriority priority) =>
+    _priorityColor(context, priority).withValues(
+      alpha: Theme.of(context).brightness == Brightness.dark ? 0.2 : 0.1,
+    );
 
 Widget _badge(String label, Color background, Color foreground) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -115,17 +146,18 @@ Widget _badge(String label, Color background, Color foreground) => Container(
   ),
 );
 
-InputDecoration _inputDecoration(String hint) => InputDecoration(
+InputDecoration _inputDecoration(String hint, BuildContext context) =>
+    InputDecoration(
   hintText: hint,
   filled: true,
-  fillColor: Colors.white,
+  fillColor: Theme.of(context).colorScheme.surfaceContainer,
   border: OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
-    borderSide: const BorderSide(color: _border),
+    borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
   ),
   enabledBorder: OutlineInputBorder(
     borderRadius: BorderRadius.circular(12),
-    borderSide: const BorderSide(color: _border),
+    borderSide: BorderSide(color: Theme.of(context).colorScheme.outlineVariant),
   ),
 );
 
@@ -144,11 +176,15 @@ String _durationLabel(int minutes) => minutes == 60
 String _clock(DateTime dateTime) =>
     '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
 
-String _timeOfDayLabel(TimeOfDay time) =>
-    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-TimeOfDay _timeOfDayFromMinutes(int minuteOfDay) =>
-    TimeOfDay(hour: minuteOfDay ~/ 60, minute: minuteOfDay % 60);
+String _taskTimeRangeOnDay(PlanoTask task, DateTime day) {
+  final start = taskVisibleStartOnDay(task, day);
+  final end = taskVisibleEndOnDay(task, day);
+  final dayEnd = DateTime(day.year, day.month, day.day + 1);
+  final continued = task.scheduledStart!.isBefore(start);
+  final continuesTomorrow = task.scheduledEnd!.isAfter(dayEnd);
+  return '${continued ? 'Suite · ' : ''}${_clock(start)}–${_clock(end)}'
+      '${continuesTomorrow ? ' · suite demain' : ''}';
+}
 
 String _formatDate(DateTime dateTime) =>
     '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';

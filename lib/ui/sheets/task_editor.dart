@@ -35,7 +35,10 @@ class _QuickCaptureState extends State<_QuickCapture> {
         hintText: 'Ajouter une tâche… ex. Appeler Léa demain',
         filled: true,
         fillColor: Theme.of(context).colorScheme.surface,
-        prefixIcon: const Icon(Icons.add_task_outlined, color: _muted),
+        prefixIcon: Icon(
+          Icons.add_task_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
         suffixIcon: IconButton(
           onPressed: _submit,
           tooltip: 'Ajouter',
@@ -47,11 +50,15 @@ class _QuickCaptureState extends State<_QuickCapture> {
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _border),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.outlineVariant,
+          ),
         ),
       ),
     );
@@ -59,9 +66,10 @@ class _QuickCaptureState extends State<_QuickCapture> {
 }
 
 class _TaskEditorSheet extends StatefulWidget {
-  const _TaskEditorSheet({this.task});
+  const _TaskEditorSheet({this.task, required this.initialScheduleDate});
 
   final PlanoTask? task;
+  final DateTime initialScheduleDate;
 
   @override
   State<_TaskEditorSheet> createState() => _TaskEditorSheetState();
@@ -75,6 +83,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   late String _project;
   late bool _locked;
   DateTime? _deadline;
+  DateTime? _scheduledStart;
 
   @override
   void initState() {
@@ -84,9 +93,10 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     _notes = TextEditingController(text: task?.notes ?? '');
     _duration = task?.durationMinutes ?? 30;
     _priority = task?.priority ?? TaskPriority.medium;
-    _project = task?.project ?? 'Studio';
+    _project = task?.project ?? '';
     _locked = task?.isLocked ?? false;
     _deadline = task?.deadline;
+    _scheduledStart = task?.scheduledStart;
   }
 
   @override
@@ -100,9 +110,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   Widget build(BuildContext context) {
     final editing = widget.task != null;
     final canLockSchedule =
-        widget.task?.status == TaskStatus.scheduled &&
-        widget.task?.scheduledStart != null &&
-        widget.task?.scheduledEnd != null;
+        _scheduledStart != null;
     return DraggableScrollableSheet(
       initialChildSize: .88,
       minChildSize: .65,
@@ -127,7 +135,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                 width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: _border,
+                  color: Theme.of(context).colorScheme.outlineVariant,
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
@@ -171,39 +179,42 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             const SizedBox(height: 14),
             const _FieldLabel('Projet'),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final project in _projectColors.keys)
-                  ChoiceChip(
-                    label: Text(project),
-                    selected: _project == project,
-                    selectedColor: _projectColor(project)
-                        .withValues(alpha: .15),
-                    onSelected: (_) => setState(() => _project = project),
-                  ),
-              ],
+            TextFormField(
+              initialValue: _project,
+              textCapitalization: TextCapitalization.words,
+              decoration: _inputDecoration('Facultatif', context),
+              onChanged: (value) => _project = value.trim(),
             ),
             const SizedBox(height: 20),
-            const _FieldLabel('Durée estimée'),
+            const _FieldLabel('Planifier le'),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              children: [
-                for (final duration in [15, 30, 45, 60, 120])
-                  ChoiceChip(
-                    label: Text(_durationLabel(duration)),
-                    selected: _duration == duration,
-                    onSelected: (_) => setState(() => _duration = duration),
-                  ),
-                ChoiceChip(
-                  label: const Text('Sans durée'),
-                  selected: _duration == null,
-                  onSelected: (_) => setState(() => _duration = null),
+            OutlinedButton.icon(
+              onPressed: _chooseSchedule,
+              icon: const Icon(Icons.calendar_month_outlined),
+              label: Text(
+                _scheduledStart == null
+                    ? 'Choisir une date et une heure'
+                    : '${_formatDate(_scheduledStart!)} à ${_clock(_scheduledStart!)}',
+              ),
+              style: OutlinedButton.styleFrom(
+                alignment: Alignment.centerLeft,
+                minimumSize: const Size.fromHeight(48),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              ],
+              ),
             ),
+            if (_scheduledStart != null)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => setState(() {
+                    _scheduledStart = null;
+                    _locked = false;
+                  }),
+                  child: const Text('Retirer du planning'),
+                ),
+              ),
             const SizedBox(height: 20),
             const _FieldLabel('Deadline'),
             const SizedBox(height: 8),
@@ -223,6 +234,16 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                 ),
               ),
             ),
+            if (_deadline != null && _scheduledStart != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  'Le créneau se terminera à la deadline.',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
             if (_deadline != null)
               Align(
                 alignment: Alignment.centerLeft,
@@ -251,11 +272,9 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Verrouiller l’horaire'),
-              subtitle: Text(
-                canLockSchedule
-                    ? 'Le planificateur ne déplacera pas cette tâche'
-                    : 'Disponible après la planification de la tâche',
-              ),
+              subtitle: Text(canLockSchedule
+                  ? 'Le planificateur ne déplacera pas cette tâche'
+                  : 'Choisissez d’abord une date et une heure'),
               value: _locked,
               activeThumbColor: _primary,
               onChanged: canLockSchedule
@@ -269,7 +288,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
               controller: _notes,
               minLines: 2,
               maxLines: 4,
-              decoration: _inputDecoration('Ajouter des détails…'),
+              decoration: _inputDecoration('Ajouter des détails…', context),
             ),
             if (editing) ...[
               const SizedBox(height: 18),
@@ -311,27 +330,93 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       ),
     );
     if (time != null) {
-      setState(
-        () => _deadline = DateTime(
-          selected.year,
-          selected.month,
-          selected.day,
-          time.hour,
-          time.minute,
-        ),
+      final deadline = DateTime(
+        selected.year,
+        selected.month,
+        selected.day,
+        time.hour,
+        time.minute,
       );
+      if (_scheduledStart != null && !deadline.isAfter(_scheduledStart!)) {
+        _showFormMessage('La deadline doit être après le début de la tâche');
+        return;
+      }
+      setState(() => _deadline = deadline);
     }
+  }
+
+  Future<void> _chooseSchedule() async {
+    final now = DateTime.now();
+    final firstDate = _dateOnly(now);
+    final initialDate = _scheduledStart ?? widget.initialScheduleDate;
+    final selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate.isBefore(firstDate) ? firstDate : initialDate,
+      firstDate: firstDate,
+      lastDate: now.add(const Duration(days: 365)),
+      locale: const Locale('fr', 'FR'),
+      helpText: 'Date de la tâche',
+    );
+    if (selectedDate == null || !mounted) return;
+    final selectedTime = await showTimePicker(
+      context: context,
+      initialTime: _scheduledStart == null
+          ? TimeOfDay.fromDateTime(now)
+          : TimeOfDay.fromDateTime(_scheduledStart!),
+      helpText: 'Heure de début',
+    );
+    if (selectedTime == null || !mounted) return;
+    final start = DateTime(
+      selectedDate.year,
+      selectedDate.month,
+      selectedDate.day,
+      selectedTime.hour,
+      selectedTime.minute,
+    );
+    if (start.isBefore(now)) {
+      _showFormMessage('Choisissez une date et une heure à venir');
+      return;
+    }
+    if (_deadline != null && !_deadline!.isAfter(start)) {
+      _showFormMessage('La deadline doit être après le début de la tâche');
+      return;
+    }
+    final end = scheduledEndForTask(
+      start: start,
+      deadline: _deadline,
+      durationMinutes: _duration,
+    )!;
+    if (_deadline == null && end.isAfter(_atTime(selectedDate, 24, 0))) {
+      _showFormMessage('La tâche doit se terminer avant minuit');
+      return;
+    }
+    setState(() => _scheduledStart = start);
   }
 
   void _save() {
     final title = _title.text.trim();
     if (title.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Saisissez un titre pour la tâche')),
-      );
+      _showFormMessage('Saisissez un titre pour la tâche');
       return;
     }
     final old = widget.task;
+    if (_scheduledStart != null &&
+        _deadline != null &&
+        !_deadline!.isAfter(_scheduledStart!)) {
+      _showFormMessage('La deadline doit être après le début de la tâche');
+      return;
+    }
+    final scheduledEnd = scheduledEndForTask(
+      start: _scheduledStart,
+      deadline: _deadline,
+      durationMinutes: _duration,
+    );
+    if (_scheduledStart != null &&
+        _deadline == null &&
+        scheduledEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
+      _showFormMessage('La tâche doit se terminer avant minuit');
+      return;
+    }
     Navigator.pop(
       context,
       _TaskFormResult(
@@ -339,17 +424,33 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
           id: old?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
           title: title,
           notes: _notes.text.trim(),
-          durationMinutes: _duration,
+          durationMinutes: scheduledEnd == null
+              ? _duration
+              : scheduledEnd.difference(_scheduledStart!).inMinutes,
           priority: _priority,
           deadline: _deadline,
-          status: old?.status ?? TaskStatus.inbox,
-          scheduledStart: old?.scheduledStart,
-          scheduledEnd: old?.scheduledEnd,
+          status: _scheduledStart != null
+              ? TaskStatus.scheduled
+              : old?.status == TaskStatus.scheduled
+              ? TaskStatus.inbox
+              : old?.status ?? TaskStatus.inbox,
+          scheduledStart: _scheduledStart,
+          scheduledEnd: scheduledEnd,
           project: _project,
-          isLocked: _locked,
+          isLocked: _locked && _scheduledStart != null,
           isAiProposed: old?.isAiProposed ?? false,
+          isDurationEstimated: _duration == null ||
+              (old?.isDurationEstimated ?? false),
         ),
       ),
     );
+  }
+
+  void _showFormMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
   }
 }
