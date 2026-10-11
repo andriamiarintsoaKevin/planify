@@ -1,6 +1,6 @@
-# Plano
+# Planify
 
-Plano est un prototype Flutter en français pour organiser une journée de
+Planify est un prototype Flutter en français pour organiser une journée de
 travail : capturer des tâches, préparer un planning déterministe, le prévisualiser
 et le valider, puis annuler la dernière validation.
 
@@ -46,9 +46,11 @@ flutter analyze
 
 ## Intégrations non incluses
 
-Ce MVP n’est pas connecté à FlutterFlow, Firebase/Auth/Firestore, RevenueCat,
-aux calendriers de l’appareil, aux notifications locales ou à un modèle de
-langage. La synchronisation calendrier affichée est indicative. Ces intégrations
+La synchronisation calendrier affichée est indicative. Ces intégrations
 nécessitent des configurations de projet et identifiants spécifiques qui ne
 sont pas présents dans ce dépôt. Le moteur de planification est du Dart pur et
 ne fait aucun appel à un LLM.
+
+## License
+
+Copyright (c) 2026 AndriamiarintsoaKevin. All rights reserved.
