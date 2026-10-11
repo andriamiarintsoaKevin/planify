@@ -82,19 +82,23 @@ class _TaskFormResult {
 class _PlannerOptions {
   const _PlannerOptions({
     required this.respectLunch,
-    required this.difficultMorning,
+    required this.prioritizeHighPriority,
     required this.addBuffer,
   });
 
   final bool respectLunch;
-  final bool difficultMorning;
+  final bool prioritizeHighPriority;
   final bool addBuffer;
 }
 
 class _PlanApproval {
-  const _PlanApproval({required this.lockedTaskIds});
+  const _PlanApproval({
+    required this.lockedTaskIds,
+    this.editOptions = false,
+  });
 
   final Set<String> lockedTaskIds;
+  final bool editOptions;
 }
 
 const _projectPalette = <Color>[
@@ -158,12 +162,6 @@ String _durationLabel(int minutes) => minutes == 60
 
 String _clock(DateTime dateTime) =>
     '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-
-String _timeOfDayLabel(TimeOfDay time) =>
-    '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-
-TimeOfDay _timeOfDayFromMinutes(int minuteOfDay) =>
-    TimeOfDay(hour: minuteOfDay ~/ 60, minute: minuteOfDay % 60);
 
 String _formatDate(DateTime dateTime) =>
     '${dateTime.day.toString().padLeft(2, '0')}/${dateTime.month.toString().padLeft(2, '0')}/${dateTime.year}';

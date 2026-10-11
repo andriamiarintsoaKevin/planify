@@ -16,7 +16,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
       0,
       (sum, task) => sum + (task.durationMinutes ?? 0),
     );
-    final load = (totalMinutes / (8 * 60)).clamp(0.0, 1.0);
+    final load = (totalMinutes / (24 * 60)).clamp(0.0, 1.0);
     final dateLabel = _selectedDate == _dateOnly(DateTime.now())
         ? 'AUJOURD’HUI'
         : _formatDate(_selectedDate).toUpperCase();
@@ -243,25 +243,42 @@ extension _PlanoTodayScreen on _PlanoAppState {
   }
 
   Widget _timeline(List<PlanoTask> scheduled) {
-    const dayStartHour = 8;
+    const dayStartHour = 0;
     const hourHeight = 72.0;
     final dayStart = _atTime(_selectedDate, dayStartHour, 0);
+    final overlappingTasks = scheduled
+        .where(_hasScheduleConflict)
+        .toList();
+    final overlapLaneByTaskId = <String, int>{};
+    var overlapLaneCount = 1;
+    for (final task in overlappingTasks) {
+      var lane = 0;
+      while (overlappingTasks.any(
+        (other) =>
+            overlapLaneByTaskId[other.id] == lane &&
+            hasScheduleOverlap(task, [other]),
+      )) {
+        lane++;
+      }
+      overlapLaneByTaskId[task.id] = lane;
+      if (lane >= overlapLaneCount) overlapLaneCount = lane + 1;
+    }
     final visibleEvents = _events.where(
       (event) =>
           _sameDay(event.start, _selectedDate) &&
           event.end.isAfter(dayStart) &&
-          event.start.hour < 19,
+          event.start.isBefore(_atTime(_selectedDate, 24, 0)),
     );
     return Card(
       clipBehavior: Clip.antiAlias,
       child: SizedBox(
-        height: 11 * hourHeight,
+        height: 24 * hourHeight,
         child: LayoutBuilder(
           builder: (context, constraints) {
             final timelineWidth = constraints.maxWidth - 56;
             return Stack(
               children: [
-                for (var hour = 0; hour <= 11; hour++)
+                for (var hour = 0; hour <= 24; hour++)
                   Positioned(
                     top: hour * hourHeight,
                     left: 8,
@@ -327,14 +344,28 @@ extension _PlanoTodayScreen on _PlanoAppState {
                       start: task.scheduledStart!,
                       duration: (task.durationMinutes ?? 30),
                       dayStart: dayStart,
-                      left: 54,
-                      width: timelineWidth,
-                      color: _projectColor(task.project)
-                          .withValues(alpha: 0.13),
-                      child: InkWell(
-                        onTap: () => _showTaskEditor(task: task),
-                        onLongPress: () => _toggleTaskLock(task),
-                        child: Row(
+                      left: 54 +
+                          (overlapLaneByTaskId.containsKey(task.id)
+                              ? overlapLaneByTaskId[task.id]! *
+                                    timelineWidth /
+                                    overlapLaneCount
+                              : 0),
+                      width: overlapLaneByTaskId.containsKey(task.id)
+                          ? timelineWidth / overlapLaneCount
+                          : timelineWidth,
+                      color: _isTaskPast(task)
+                          ? _muted.withValues(alpha: 0.12)
+                          : _projectColor(task.project).withValues(alpha: 0.13),
+                      child: Opacity(
+                        opacity: _isTaskPast(task) ? 0.45 : 1,
+                        child: InkWell(
+                          onTap: _isTaskPast(task)
+                              ? null
+                              : () => _showTaskEditor(task: task),
+                          onLongPress: _isTaskPast(task)
+                              ? null
+                              : () => _toggleTaskLock(task),
+                          child: Row(
                           children: [
                             Container(
                               width: 4,
@@ -376,7 +407,17 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                 size: 15,
                                 color: _muted,
                               ),
+                            if (_hasScheduleConflict(task))
+                              const Tooltip(
+                                message: 'Cette tâche chevauche une autre tâche',
+                                child: Icon(
+                                  Icons.warning_amber_rounded,
+                                  size: 17,
+                                  color: _danger,
+                                ),
+                              ),
                           ],
+                        ),
                         ),
                       ),
                     ),

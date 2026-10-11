@@ -35,36 +35,6 @@ class SqlitePlanifyRepository implements PlanoRepository {
       const <FixedEvent>[];
 
   @override
-  Future<WorkSchedule> loadWorkSchedule() async {
-    final rows = await (await _db).query(
-      'work_schedule',
-      where: 'id = ?',
-      whereArgs: [1],
-      limit: 1,
-    );
-    if (rows.isEmpty) {
-      return const WorkSchedule(startMinute: 9 * 60, endMinute: 18 * 60);
-    }
-    return WorkSchedule(
-      startMinute: rows.single['start_minute']! as int,
-      endMinute: rows.single['end_minute']! as int,
-    );
-  }
-
-  @override
-  Future<void> saveWorkSchedule(WorkSchedule schedule) async {
-    await (await _db).insert(
-      'work_schedule',
-      {
-        'id': 1,
-        'start_minute': schedule.startMinute,
-        'end_minute': schedule.endMinute,
-      },
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
-
-  @override
   Future<bool> loadDarkMode() async {
     final rows = await (await _db).query(
       'preferences',
@@ -112,7 +82,7 @@ class SqlitePlanifyRepository implements PlanoRepository {
     final location = databasePath ?? await getPlanifyDatabasePath();
     return openDatabase(
       location,
-      version: 1,
+      version: 2,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE tasks (
@@ -132,18 +102,16 @@ class SqlitePlanifyRepository implements PlanoRepository {
           )
         ''');
         await database.execute('''
-          CREATE TABLE work_schedule (
-            id INTEGER PRIMARY KEY CHECK (id = 1),
-            start_minute INTEGER NOT NULL,
-            end_minute INTEGER NOT NULL
-          )
-        ''');
-        await database.execute('''
           CREATE TABLE preferences (
             key TEXT PRIMARY KEY,
             value INTEGER NOT NULL
           )
         ''');
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute('DROP TABLE IF EXISTS work_schedule');
+        }
       },
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:planify/data/in_memory_planify_repository.dart';
+import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
 
 void main() {
@@ -49,12 +50,28 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Préparer le plan'), findsOneWidget);
+    expect(
+      tester
+          .widgetList<SwitchListTile>(find.byType(SwitchListTile))
+          .every((toggle) => !toggle.value),
+      isTrue,
+    );
     await tester.ensureVisible(find.text('Générer le plan'));
     await tester.tap(find.text('Générer le plan'));
     await tester.pumpAndSettle();
 
     expect(find.text('Plan proposé'), findsOneWidget);
+    expect(find.textContaining('00:00–00:30'), findsOneWidget);
     expect(find.text('Tout est dans les temps'), findsOneWidget);
+    await tester.drag(find.byType(ListView).last, const Offset(0, -700));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Modifier'));
+    await tester.pumpAndSettle();
+    expect(find.text('Préparer le plan'), findsOneWidget);
+    await tester.ensureVisible(find.text('Générer le plan'));
+    await tester.tap(find.text('Générer le plan'));
+    await tester.pumpAndSettle();
+    expect(find.text('Plan proposé'), findsOneWidget);
     await tester.drag(find.byType(ListView).last, const Offset(0, -700));
     await tester.pumpAndSettle();
     expect(find.text('Valider le plan'), findsOneWidget);
@@ -89,5 +106,64 @@ void main() {
     await tester.drag(find.byType(ListView).last, const Offset(0, -450));
     await tester.pumpAndSettle();
     expect(find.text('Ce qui n’est pas encore connecté'), findsOneWidget);
+  });
+
+  testWidgets('permet de choisir une date et une heure pour une tâche', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Choisir une date et une heure'));
+    await tester.tap(find.text('Choisir une date et une heure'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(DatePickerDialog), findsOneWidget);
+    expect(find.text('OK'), findsOneWidget);
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TimePickerDialog), findsOneWidget);
+    expect(find.text('Heure de début'), findsOneWidget);
+  });
+
+  testWidgets('signale en rouge deux tâches qui se chevauchent', (
+    WidgetTester tester,
+  ) async {
+    final repository = InMemoryPlanifyRepository();
+    final now = DateTime.now();
+    final start = DateTime(
+      now.year,
+      now.month,
+      now.day,
+      now.hour,
+      now.minute,
+    );
+    final end = start.add(const Duration(hours: 1));
+    await repository.saveTasks([
+      PlanoTask(
+        id: 'overlap-a',
+        title: 'Tâche A',
+        status: TaskStatus.scheduled,
+        scheduledStart: start,
+        scheduledEnd: end,
+      ),
+      PlanoTask(
+        id: 'overlap-b',
+        title: 'Tâche B',
+        status: TaskStatus.scheduled,
+        scheduledStart: start,
+        scheduledEnd: end,
+      ),
+    ]);
+    await tester.pumpWidget(PlanoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Calendrier').last);
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.warning_amber_rounded), findsNWidgets(2));
   });
 }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -31,6 +33,7 @@ const _ink = Color(0xFF111827);
 const _muted = Color(0xFF6B7280);
 const _canvas = Color(0xFFF7F7FB);
 const _border = Color(0xFFE5E7EB);
+
 class PlanoApp extends StatefulWidget {
   const PlanoApp({super.key, this.repository});
 
@@ -42,8 +45,6 @@ class PlanoApp extends StatefulWidget {
 
 class _PlanoAppState extends State<PlanoApp> {
   bool _darkMode = false;
-  TimeOfDay _workStart = const TimeOfDay(hour: 9, minute: 0);
-  TimeOfDay _workEnd = const TimeOfDay(hour: 18, minute: 0);
   late final PlanoRepository _repository =
       widget.repository ?? SqlitePlanifyRepository();
   final _tasks = <PlanoTask>[];
@@ -54,11 +55,21 @@ class _PlanoAppState extends State<PlanoApp> {
   BuildContext? _appContext;
   bool _isLoading = true;
   Object? _loadError;
+  late final Timer _clockRefreshTimer;
 
   @override
   void initState() {
     super.initState();
+    _clockRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+      if (mounted) setState(() {});
+    });
     _loadInitialData();
+  }
+
+  @override
+  void dispose() {
+    _clockRefreshTimer.cancel();
+    super.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -70,19 +81,15 @@ class _PlanoAppState extends State<PlanoApp> {
       final values = await Future.wait<Object>([
         _repository.loadTasks(),
         _repository.loadEvents(_selectedDate),
-        _repository.loadWorkSchedule(),
         _repository.loadDarkMode(),
       ]);
       if (!mounted) return;
-      final schedule = values[2] as WorkSchedule;
       setState(() {
         _tasks
           ..clear()
           ..addAll(values[0] as List<PlanoTask>);
         _events = values[1] as List<FixedEvent>;
-        _workStart = _timeOfDayFromMinutes(schedule.startMinute);
-        _workEnd = _timeOfDayFromMinutes(schedule.endMinute);
-        _darkMode = values[3] as bool;
+        _darkMode = values[2] as bool;
         _isLoading = false;
       });
     } on Object catch (error) {
@@ -144,17 +151,12 @@ class _PlanoAppState extends State<PlanoApp> {
 
   Widget _buildHome() {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (_loadError != null) {
       return Scaffold(
         body: Center(
-          child: _LoadErrorView(
-            error: _loadError!,
-            onRetry: _loadInitialData,
-          ),
+          child: _LoadErrorView(error: _loadError!, onRetry: _loadInitialData),
         ),
       );
     }
@@ -206,14 +208,32 @@ class _PlanoAppState extends State<PlanoApp> {
   }
 
   Future<void> _showTaskEditor({PlanoTask? task}) async {
+    if (task != null && _isTaskPast(task)) {
+      _showMessage(
+        'Cette tâche passée ne peut plus être modifiée ou supprimée',
+      );
+      return;
+    }
     final result = await showModalBottomSheet<_TaskFormResult>(
       context: _appContext!,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _TaskEditorSheet(task: task),
+      builder: (context) =>
+          _TaskEditorSheet(task: task, initialScheduleDate: _selectedDate),
     );
     if (result == null) return;
+    if (task != null && _isTaskPast(task)) {
+      _showMessage(
+        'Cette tâche passée ne peut plus être modifiée ou supprimée',
+      );
+      return;
+    }
     if (result.deleteId != null) {
+      final taskToDelete = _tasks.where((item) => item.id == result.deleteId);
+      if (taskToDelete.isNotEmpty && _isTaskPast(taskToDelete.first)) {
+        _showMessage('Cette tâche passée ne peut plus être supprimée');
+        return;
+      }
       setState(() => _tasks.removeWhere((item) => item.id == result.deleteId));
       if (!await _persistTasks()) return;
       return;
@@ -228,6 +248,12 @@ class _PlanoAppState extends State<PlanoApp> {
       }
     });
     if (!await _persistTasks()) return;
+    if (hasScheduleOverlap(updated, _tasks)) {
+      _showMessage(
+        'Chevauchement détecté : les tâches concernées sont signalées en rouge',
+      );
+      return;
+    }
     _showMessage(
       task == null ? 'Tâche ajoutée à l’Inbox' : 'Tâche mise à jour',
     );
@@ -254,11 +280,16 @@ class _PlanoAppState extends State<PlanoApp> {
           (task) =>
               task.status == TaskStatus.inbox ||
               (task.status == TaskStatus.scheduled &&
+                  !_isTaskPast(task) &&
                   task.scheduledStart != null &&
                   _sameDay(task.scheduledStart!, _selectedDate)),
         ),
       );
     } else {
+      if (_isTaskPast(onlyTask)) {
+        _showMessage('Cette tâche passée ne peut plus être réorganisée');
+        return;
+      }
       if (onlyTask.isLocked) {
         _showMessage('Cette tâche est verrouillée à son horaire actuel');
         return;
@@ -269,6 +300,7 @@ class _PlanoAppState extends State<PlanoApp> {
           (task) =>
               task.isLocked &&
               task.status == TaskStatus.scheduled &&
+              !_isTaskPast(task) &&
               task.scheduledStart != null &&
               _sameDay(task.scheduledStart!, _selectedDate) &&
               task.id != onlyTask.id,
@@ -279,54 +311,51 @@ class _PlanoAppState extends State<PlanoApp> {
       _showMessage('Aucune tâche à planifier dans l’Inbox');
       return;
     }
-    final settings = await showModalBottomSheet<_PlannerOptions>(
-      context: _appContext!,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _PlannerSetupSheet(
-        taskCount: selectedTasks.length,
-        totalMinutes: selectedTasks.fold<int>(
-          0,
-          (sum, task) => sum + (task.durationMinutes ?? 30),
-        ),
-        fixedCount: _events.length,
-        workWindow:
-            '${_timeOfDayLabel(_workStart)} – ${_timeOfDayLabel(_workEnd)}',
-      ),
-    );
-    if (settings == null || !mounted) return;
     final date = _dateOnly(_selectedDate);
-    final plannerSettings = PlanSettings(
-      workStart: _atTime(date, _workStart.hour, _workStart.minute),
-      workEnd: _atTime(date, _workEnd.hour, _workEnd.minute),
-      lunchStart: settings.respectLunch ? _atTime(date, 12, 30) : null,
-      lunchEnd: settings.respectLunch ? _atTime(date, 13, 30) : null,
-      bufferMinutes: settings.addBuffer ? 10 : 0,
-      difficultTasksInMorning: settings.difficultMorning,
-    );
-    final result = generatePlan(
-      tasks: selectedTasks,
-      fixedEvents: _events,
-      settings: plannerSettings,
-    );
-    final approval = await Navigator.of(_appContext!).push<_PlanApproval>(
-      MaterialPageRoute(
-        builder: (context) => _PlanPreviewPage(
-          result: result,
-          selectedDate: _selectedDate,
-          events: _events,
+    while (mounted) {
+      final options = await showModalBottomSheet<_PlannerOptions>(
+        context: _appContext!,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        builder: (context) => _PlannerSetupSheet(
+          taskCount: selectedTasks.length,
+          totalMinutes: selectedTasks.fold<int>(
+            0,
+            (sum, task) => sum + (task.durationMinutes ?? 30),
+          ),
+          fixedCount: _events.length,
         ),
-      ),
-    );
-    if (approval != null && mounted) {
+      );
+      if (options == null || !mounted) return;
+      final result = generatePlan(
+        tasks: selectedTasks,
+        fixedEvents: _events,
+        settings: PlanSettings(
+          dayStart: date,
+          dayEnd: _atTime(date, 24, 0),
+          lunchStart: options.respectLunch ? _atTime(date, 12, 30) : null,
+          lunchEnd: options.respectLunch ? _atTime(date, 13, 30) : null,
+          bufferMinutes: options.addBuffer ? 10 : 0,
+          prioritizeHighPriority: options.prioritizeHighPriority,
+        ),
+      );
+      final approval = await Navigator.of(_appContext!).push<_PlanApproval>(
+        MaterialPageRoute(
+          builder: (context) => _PlanPreviewPage(
+            result: result,
+            selectedDate: _selectedDate,
+            events: _events,
+          ),
+        ),
+      );
+      if (approval == null || !mounted) return;
+      if (approval.editOptions) continue;
       await _applyPlan(result, approval.lockedTaskIds);
+      return;
     }
   }
 
-  Future<void> _applyPlan(
-    PlanResult result,
-    Set<String> lockedTaskIds,
-  ) async {
+  Future<void> _applyPlan(PlanResult result, Set<String> lockedTaskIds) async {
     _lastSnapshot = List<PlanoTask>.of(_tasks);
     setState(() {
       for (final placement in result.placements) {
@@ -355,6 +384,7 @@ class _PlanoAppState extends State<PlanoApp> {
     ScaffoldMessenger.of(_appContext!).showSnackBar(
       SnackBar(
         content: const Text('Planning modifié'),
+        duration: const Duration(seconds: 2),
         action: SnackBarAction(label: 'Annuler', onPressed: _undoLastPlan),
       ),
     );
@@ -375,12 +405,20 @@ class _PlanoAppState extends State<PlanoApp> {
   }
 
   Future<void> _deleteTask(PlanoTask task) async {
+    if (_isTaskPast(task)) {
+      _showMessage('Cette tâche passée ne peut plus être supprimée');
+      return;
+    }
     setState(() => _tasks.removeWhere((item) => item.id == task.id));
     if (!await _persistTasks()) return;
     _showMessage('Tâche supprimée');
   }
 
   Future<void> _toggleTaskLock(PlanoTask task) async {
+    if (_isTaskPast(task)) {
+      _showMessage('Cette tâche passée ne peut plus être modifiée');
+      return;
+    }
     setState(() {
       final index = _tasks.indexWhere((item) => item.id == task.id);
       if (index >= 0) {
@@ -406,41 +444,6 @@ class _PlanoAppState extends State<PlanoApp> {
     }
   }
 
-  Future<void> _editWorkHours() async {
-    final start = await showTimePicker(
-      context: _appContext!,
-      initialTime: _workStart,
-      helpText: 'Début de journée',
-    );
-    if (!mounted || start == null) return;
-    final end = await showTimePicker(
-      context: _appContext!,
-      initialTime: _workEnd,
-      helpText: 'Fin de journée',
-    );
-    if (!mounted || end == null) return;
-    final startMinutes = start.hour * 60 + start.minute;
-    final endMinutes = end.hour * 60 + end.minute;
-    if (endMinutes <= startMinutes) {
-      _showMessage('La fin de journée doit être après son début');
-      return;
-    }
-  final schedule = WorkSchedule(
-    startMinute: startMinutes,
-    endMinute: endMinutes,
-  );
-  try {
-    await _repository.saveWorkSchedule(schedule);
-    if (!mounted) return;
-    setState(() {
-      _workStart = start;
-      _workEnd = end;
-    });
-  } on Object catch (error) {
-    _showMessage('Impossible d’enregistrer les horaires : $error');
-  }
-  }
-
   Future<bool> _persistTasks() async {
     try {
       await _repository.saveTasks(List.unmodifiable(_tasks));
@@ -456,8 +459,14 @@ class _PlanoAppState extends State<PlanoApp> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(_appContext!)
       ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
   }
+
+  bool _isTaskPast(PlanoTask task) => isTaskPast(task, DateTime.now());
+
+  bool _hasScheduleConflict(PlanoTask task) => hasScheduleOverlap(task, _tasks);
 
   Widget _emptyCard({
     required IconData icon,

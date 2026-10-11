@@ -23,7 +23,7 @@ class _ProductGuideScreen extends StatelessWidget {
           ),
           _GuideSection(
             title: 'Ce que Planify sait faire ici',
-            body: 'Créer et modifier des tâches, ajouter un projet facultatif, une priorité et une deadline, puis calculer un aperçu local en tenant compte des événements de calendrier réellement fournis, de la pause, de la marge et des deadlines. Vous pouvez valider ou annuler le dernier plan.',
+            body: 'Créer et modifier des tâches, ajouter un projet facultatif, une priorité et une deadline, puis organiser l’ensemble des 24 heures. La pause déjeuner, la marge et le placement des tâches difficiles le matin restent optionnels. Vous pouvez prévisualiser, modifier, valider ou annuler le plan.',
             icon: Icons.check_circle_outline,
           ),
           _GuideSection(

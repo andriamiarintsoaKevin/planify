@@ -32,12 +32,15 @@ AVANT DE COMMENCER
 3. MODIFIER ET SUPPRIMER UNE TÂCHE
 ----------------------------------
 1. Toucher la tâche créée pour ouvrir son formulaire.
-2. Ajouter un projet facultatif, par exemple « Projet personnel ».
-3. Modifier sa durée, sa priorité et ses notes, puis enregistrer.
-4. Vérifier que les changements sont visibles sur la carte.
-5. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
+2. Choisir « Planifier le » puis sélectionner une date et une heure.
+3. Ajouter un projet facultatif, par exemple « Projet personnel ».
+4. Modifier sa durée, sa priorité et ses notes, puis enregistrer.
+5. Vérifier que la tâche apparaît au créneau choisi.
+6. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
    vide.
-6. Créer de nouveau une tâche pour les essais de planification.
+7. Créer deux tâches qui se chevauchent et vérifier l’avertissement rouge.
+8. Vérifier qu’un créneau déjà passé est grisé et ne peut plus être ouvert ni
+   supprimé.
 
 4. PRÉVISUALISER ET VALIDER UN PLAN
 -----------------------------------
@@ -54,15 +57,19 @@ AVANT DE COMMENCER
 --------------------------------------
 1. Créer ou modifier une tâche et lui attribuer une deadline future.
 2. Générer un plan et vérifier que l’horaire proposé tient compte de l’échéance.
-3. Dans « Réglages », modifier les heures de travail et vérifier qu’elles sont
-   affichées.
-4. Activer puis désactiver le thème sombre.
+3. Vérifier que pause déjeuner, marge et priorité haute sont désactivées par
+   défaut.
+4. Générer un plan en laissant ces règles désactivées : elles ne doivent pas
+   modifier les créneaux.
+5. Recommencer en activant une règle et vérifier que seule cette règle est
+   appliquée.
+6. Activer puis désactiver le thème sombre.
 
 6. VÉRIFIER LA DURÉE DES DONNÉES
 --------------------------------
 1. Ajouter une tâche et remplir plusieurs champs : notes, projet, durée,
    priorité et deadline.
-2. Enregistrer la tâche et modifier les horaires de travail ainsi que le thème.
+2. Enregistrer la tâche et modifier le thème.
 3. Fermer complètement puis relancer l’application.
 4. Vérifier que la tâche, tous ses champs et les réglages sont conservés.
 5. Supprimer la tâche, fermer puis relancer l’application et vérifier que la

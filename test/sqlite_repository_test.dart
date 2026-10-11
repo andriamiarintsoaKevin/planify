@@ -3,9 +3,9 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:planify/data/sqlite_planify_repository.dart';
-import 'package:planify/data/plano_repository.dart';
 import 'package:planify/domain/planner.dart';
-import 'package:sqflite/sqflite.dart' show databaseFactory;
+import 'package:sqflite/sqflite.dart'
+    show OpenDatabaseOptions, databaseFactory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'
     show databaseFactoryFfi, sqfliteFfiInit;
 
@@ -45,10 +45,8 @@ void main() {
       isAiProposed: true,
       isDurationEstimated: false,
     );
-    const schedule = WorkSchedule(startMinute: 8 * 60, endMinute: 17 * 60);
 
     await repository.saveTasks([task]);
-    await repository.saveWorkSchedule(schedule);
     await repository.saveDarkMode(true);
     await repository.close();
 
@@ -70,9 +68,6 @@ void main() {
     expect(storedTask.isLocked, task.isLocked);
     expect(storedTask.isAiProposed, task.isAiProposed);
     expect(storedTask.isDurationEstimated, task.isDurationEstimated);
-    final storedSchedule = await reopenedRepository.loadWorkSchedule();
-    expect(storedSchedule.startMinute, schedule.startMinute);
-    expect(storedSchedule.endMinute, schedule.endMinute);
     expect(await reopenedRepository.loadDarkMode(), isTrue);
 
     await reopenedRepository.saveTasks([]);
@@ -85,16 +80,81 @@ void main() {
     await repositoryAfterDeletion.close();
   });
 
-  test(
-    'utilise les réglages par défaut tant qu’ils ne sont pas enregistrés',
-    () async {
-    final repository = SqlitePlanifyRepository(databasePath: databasePath);
+  test('migre depuis la version précédente sans perdre les tâches', () async {
+    final previousDatabase = await databaseFactory.openDatabase(
+    databasePath,
+    options: OpenDatabaseOptions(
+      version: 1,
+      onCreate: (database, version) async {
+        await database.execute('''
+          CREATE TABLE tasks (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            notes TEXT NOT NULL,
+            duration_minutes INTEGER,
+            priority TEXT NOT NULL,
+            deadline TEXT,
+            status TEXT NOT NULL,
+            scheduled_start TEXT,
+            scheduled_end TEXT,
+            project TEXT NOT NULL,
+            is_locked INTEGER NOT NULL,
+            is_ai_proposed INTEGER NOT NULL,
+            is_duration_estimated INTEGER NOT NULL
+          )
+        ''');
+        await database.execute('''
+          CREATE TABLE work_schedule (
+            id INTEGER PRIMARY KEY,
+            start_minute INTEGER NOT NULL,
+            end_minute INTEGER NOT NULL
+          )
+        ''');
+        await database.execute('''
+          CREATE TABLE preferences (
+            key TEXT PRIMARY KEY,
+            value INTEGER NOT NULL
+          )
+        ''');
+      },
+    ),
+    );
+    await previousDatabase.insert('tasks', {
+    'id': 'legacy-task',
+    'title': 'Tâche à conserver',
+    'notes': '',
+    'duration_minutes': null,
+    'priority': TaskPriority.medium.name,
+    'deadline': null,
+    'status': TaskStatus.inbox.name,
+    'scheduled_start': null,
+    'scheduled_end': null,
+    'project': '',
+    'is_locked': 0,
+    'is_ai_proposed': 0,
+    'is_duration_estimated': 0,
+    });
+    await previousDatabase.close();
 
-      final schedule = await repository.loadWorkSchedule();
-      expect(schedule.startMinute, 9 * 60);
-      expect(schedule.endMinute, 18 * 60);
+    final repository = SqlitePlanifyRepository(databasePath: databasePath);
+    expect((await repository.loadTasks()).single.title, 'Tâche à conserver');
     expect(await repository.loadDarkMode(), isFalse);
     await repository.close();
-    },
-  );
+
+    final upgradedDatabase = await databaseFactory.openDatabase(databasePath);
+    final versionRows = await upgradedDatabase.rawQuery('PRAGMA user_version');
+    expect(versionRows.single.values.single, 2);
+    final tables = await upgradedDatabase.rawQuery(
+      "SELECT name FROM sqlite_master WHERE type = 'table'",
+    );
+    expect(
+      tables.map((row) => row['name']),
+      containsAll(['tasks', 'preferences']),
+    );
+    expect(
+      tables.map((row) => row['name']),
+      isNot(contains('work_schedule')),
+    );
+    await upgradedDatabase.close();
+  });
 }

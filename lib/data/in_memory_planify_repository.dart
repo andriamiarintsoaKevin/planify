@@ -3,10 +3,6 @@ import 'plano_repository.dart';
 
 class InMemoryPlanifyRepository implements PlanoRepository {
   List<PlanoTask> _tasks = [];
-  WorkSchedule _workSchedule = const WorkSchedule(
-    startMinute: 9 * 60,
-    endMinute: 18 * 60,
-  );
   bool _darkMode = false;
 
   @override
@@ -20,14 +16,6 @@ class InMemoryPlanifyRepository implements PlanoRepository {
   @override
   Future<List<FixedEvent>> loadEvents(DateTime date) async =>
       const <FixedEvent>[];
-
-  @override
-  Future<WorkSchedule> loadWorkSchedule() async => _workSchedule;
-
-  @override
-  Future<void> saveWorkSchedule(WorkSchedule schedule) async {
-    _workSchedule = schedule;
-  }
 
   @override
   Future<bool> loadDarkMode() async => _darkMode;

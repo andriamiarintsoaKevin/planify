@@ -30,28 +30,14 @@ extension _PlanoSettingsScreen on _PlanoAppState {
             ),
           ),
           const SizedBox(height: 14),
-          const _SettingsHeader('Planification'),
+          const _SettingsHeader('Préférences'),
           Card(
-            child: Column(
-              children: [
-                ListTile(
-                  leading: const Icon(Icons.schedule_outlined),
-                  title: const Text('Heures de travail'),
-                  subtitle: Text(
-                    '${_timeOfDayLabel(_workStart)} – ${_timeOfDayLabel(_workEnd)}, du lundi au vendredi',
-                  ),
-                  trailing: const Icon(Icons.chevron_right),
-                  onTap: _editWorkHours,
-                ),
-                const Divider(height: 1, indent: 56),
-                SwitchListTile(
-                  secondary: const Icon(Icons.dark_mode_outlined),
-                  title: const Text('Apparence sombre'),
-                  value: _darkMode,
-                  activeThumbColor: _primary,
-                  onChanged: _setDarkMode,
-                ),
-              ],
+            child: SwitchListTile(
+              secondary: const Icon(Icons.dark_mode_outlined),
+              title: const Text('Apparence sombre'),
+              value: _darkMode,
+              activeThumbColor: _primary,
+              onChanged: _setDarkMode,
             ),
           ),
           const SizedBox(height: 14),

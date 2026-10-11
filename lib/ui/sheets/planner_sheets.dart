@@ -5,22 +5,20 @@ class _PlannerSetupSheet extends StatefulWidget {
     required this.taskCount,
     required this.totalMinutes,
     required this.fixedCount,
-    required this.workWindow,
   });
 
   final int taskCount;
   final int totalMinutes;
   final int fixedCount;
-  final String workWindow;
 
   @override
   State<_PlannerSetupSheet> createState() => _PlannerSetupSheetState();
 }
 
 class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
-  bool _respectLunch = true;
-  bool _difficultMorning = true;
-  bool _addBuffer = true;
+  bool _respectLunch = false;
+  bool _prioritizeHighPriority = false;
+  bool _addBuffer = false;
 
   @override
   Widget build(BuildContext context) {
@@ -57,26 +55,25 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
                 style: const TextStyle(color: _muted),
               ),
               const SizedBox(height: 16),
-              Card(
-                child: ListTile(
-                  leading: const Icon(Icons.schedule, color: _primary),
-                  title: const Text('Journée de travail'),
-                  subtitle: Text(widget.workWindow),
-                ),
+              const Text(
+                'Les 24 heures sont disponibles. Active uniquement les règles que tu souhaites appliquer.',
+                style: TextStyle(color: _muted),
               ),
+              const SizedBox(height: 8),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Respecter ma pause déjeuner'),
+                title: const Text('Réserver une pause déjeuner'),
                 value: _respectLunch,
                 activeThumbColor: _primary,
                 onChanged: (value) => setState(() => _respectLunch = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Tâches difficiles le matin'),
-                value: _difficultMorning,
+                title: const Text('Planifier les priorités hautes en premier'),
+                value: _prioritizeHighPriority,
                 activeThumbColor: _primary,
-                onChanged: (value) => setState(() => _difficultMorning = value),
+                onChanged: (value) =>
+                    setState(() => _prioritizeHighPriority = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
@@ -91,7 +88,7 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
                   context,
                   _PlannerOptions(
                     respectLunch: _respectLunch,
-                    difficultMorning: _difficultMorning,
+                    prioritizeHighPriority: _prioritizeHighPriority,
                     addBuffer: _addBuffer,
                   ),
                 ),
@@ -107,7 +104,7 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
               const SizedBox(height: 8),
               const Center(
                 child: Text(
-                  'Le planning est calculé localement, sans IA.',
+                  'Le plan est généré automatiquement sur cet appareil.',
                   style: TextStyle(fontSize: 12, color: _muted),
                 ),
               ),
@@ -147,7 +144,7 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
           style: TextStyle(fontWeight: FontWeight.w700),
         ),
         leading: IconButton(
-          onPressed: () => Navigator.pop(context, false),
+          onPressed: () => Navigator.pop<_PlanApproval>(context),
           icon: const Icon(Icons.close),
         ),
       ),
@@ -294,7 +291,13 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
             ),
           const SizedBox(height: 22),
           OutlinedButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(
+              context,
+              _PlanApproval(
+                lockedTaskIds: Set.of(_lockedIds),
+                editOptions: true,
+              ),
+            ),
             style: OutlinedButton.styleFrom(
               minimumSize: const Size.fromHeight(50),
             ),

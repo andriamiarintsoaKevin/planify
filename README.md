@@ -1,8 +1,8 @@
 # Planify
 
-Planify est une application Flutter locale en français pour organiser une journée de
-travail : capturer des tâches, préparer un planning déterministe, le prévisualiser
-et le valider, puis annuler la dernière validation.
+Planify est une application Flutter locale en français pour organiser une journée :
+capturer des tâches, préparer un planning déterministe, le prévisualiser et le
+valider, puis annuler la dernière validation.
 
 ## Ce que l’application fait
 
@@ -11,13 +11,17 @@ et le valider, puis annuler la dernière validation.
   après validation d’un créneau.
 - Création et édition de tâches avec projet, durée, deadline, priorité, notes et
   verrouillage de créneaux déjà planifiés.
-- Planification locale autour des événements fixes, de la pause déjeuner et
-  d’une marge configurable.
+- Planification manuelle d’une tâche à une date et une heure choisies. Les
+  chevauchements sont autorisés et signalés en rouge ; les tâches terminées
+  restent visibles en grisé et ne peuvent plus être modifiées ou supprimées.
+- Planification locale sur toute la journée (00 h–24 h), autour des événements
+  fixes. La pause déjeuner, la marge entre les tâches et la priorité aux tâches
+  urgentes sont des règles facultatives, désactivées par défaut.
 - Tri déterministe par deadline, priorité et durée. Les tâches sans durée sont
   estimées à 30 minutes.
 - Aperçu du plan, liste des tâches qui ne rentrent pas, validation et annulation
   par snapshot en mémoire.
-- Thème clair/sombre et horaires de travail modifiables.
+- Thème clair/sombre.
 - Tâches et préférences enregistrées localement dans une base SQLite, conservées
   après fermeture ou redémarrage de l’application jusqu’à leur suppression.
 
@@ -46,7 +50,7 @@ et le valider, puis annuler la dernière validation.
 - `lib/data/plano_repository.dart` : contrat asynchrone entre l’application et
   ses données.
 - `lib/data/sqlite_planify_repository.dart` : stockage local persistant des
-  tâches, horaires de travail et préférences.
+  tâches et préférences.
 - `lib/data/in_memory_planify_repository.dart` : dépôt temporaire destiné aux
   tests et aux aperçus de l’application.
 
