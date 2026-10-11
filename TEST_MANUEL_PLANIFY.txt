@@ -1,0 +1,80 @@
+PLANIFY — INSTRUCTIONS DE TEST MANUEL
+======================================
+
+OBJECTIF
+--------
+Vérifier les parcours principaux et la conservation locale des données.
+
+AVANT DE COMMENCER
+------------------
+1. Depuis la racine du projet, exécuter : flutter pub get
+2. Démarrer l’application : flutter run
+3. Au premier lancement, vérifier qu’aucune tâche ou aucun rendez-vous fictif
+   n’apparaît. Les tâches et réglages saisis seront enregistrés localement.
+
+1. VÉRIFIER LE DÉMARRAGE VIDE
+----------------------------
+1. Ouvrir « Inbox ».
+2. Vérifier le compteur « 0 à planifier » et le message « Votre Inbox est vide ».
+3. Ouvrir « Calendrier ».
+4. Vérifier « Aucun élément prévu » et l’absence de rendez-vous « Point client ».
+5. Ouvrir « Réglages » puis « Comprendre Planify ».
+6. Vérifier que le guide indique que les données restent locales et ne sont
+   pas synchronisées entre appareils.
+
+2. AJOUTER UNE TÂCHE RAPIDEMENT
+-------------------------------
+1. Retourner dans « Inbox ».
+2. Saisir « Préparer une présentation » dans le champ de capture rapide.
+3. Appuyer sur le bouton d’ajout du champ.
+4. Vérifier que la tâche apparaît dans l’Inbox et que le compteur vaut 1.
+
+3. MODIFIER ET SUPPRIMER UNE TÂCHE
+----------------------------------
+1. Toucher la tâche créée pour ouvrir son formulaire.
+2. Ajouter un projet facultatif, par exemple « Projet personnel ».
+3. Modifier sa durée, sa priorité et ses notes, puis enregistrer.
+4. Vérifier que les changements sont visibles sur la carte.
+5. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
+   vide.
+6. Créer de nouveau une tâche pour les essais de planification.
+
+4. PRÉVISUALISER ET VALIDER UN PLAN
+-----------------------------------
+1. Créer une tâche d’au moins 30 minutes avec une durée estimée.
+2. Dans l’Inbox, choisir « Planifier automatiquement ».
+3. Générer le plan et vérifier que l’écran d’aperçu affiche la tâche et un
+   créneau.
+4. Valider le plan.
+5. Vérifier que la tâche apparaît dans « Aujourd’hui » et dans « Calendrier ».
+6. Utiliser « Annuler » si l’action est proposée et vérifier que la tâche
+   retourne dans l’Inbox.
+
+5. TESTER UNE DEADLINE ET LES RÉGLAGES
+--------------------------------------
+1. Créer ou modifier une tâche et lui attribuer une deadline future.
+2. Générer un plan et vérifier que l’horaire proposé tient compte de l’échéance.
+3. Dans « Réglages », modifier les heures de travail et vérifier qu’elles sont
+   affichées.
+4. Activer puis désactiver le thème sombre.
+
+6. VÉRIFIER LA DURÉE DES DONNÉES
+--------------------------------
+1. Ajouter une tâche et remplir plusieurs champs : notes, projet, durée,
+   priorité et deadline.
+2. Enregistrer la tâche et modifier les horaires de travail ainsi que le thème.
+3. Fermer complètement puis relancer l’application.
+4. Vérifier que la tâche, tous ses champs et les réglages sont conservés.
+5. Supprimer la tâche, fermer puis relancer l’application et vérifier que la
+   tâche supprimée ne réapparaît pas.
+
+LIMITES CONNUES
+---------------
+- Les données SQLite restent sur l’appareil et ne sont pas synchronisées entre
+  appareils.
+- L’adaptateur SQLite est disponible sur Android, iOS, macOS, Windows et Linux,
+  mais pas dans la version Web.
+- Aucun compte, serveur, calendrier externe, notification ou abonnement n’est
+  connecté.
+- La synchronisation cloud et la persistance entre appareils ne sont pas
+  disponibles.

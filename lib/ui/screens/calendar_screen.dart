@@ -56,7 +56,8 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                   ),
                   title: Text(task.title),
                   subtitle: Text(
-                    '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)} · ${task.project}',
+                    '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)}'
+                    '${task.project.isEmpty ? '' : ' · ${task.project}'}',
                   ),
                   trailing: task.isLocked
                       ? const Icon(Icons.lock_outline, size: 18)
@@ -68,7 +69,7 @@ extension _PlanoCalendarScreen on _PlanoAppState {
           const SizedBox(height: 12),
           const Center(
             child: Text(
-              'Synchronisation calendrier · démonstration',
+              'Aucun calendrier connecté',
               style: TextStyle(fontSize: 12, color: _muted),
             ),
           ),

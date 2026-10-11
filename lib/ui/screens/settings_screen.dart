@@ -22,7 +22,7 @@ extension _PlanoSettingsScreen on _PlanoAppState {
                 'Mon espace',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              subtitle: const Text('Compte local de démonstration'),
+              subtitle: const Text('Aucun compte connecté · données locales'),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => _showMessage(
                 'La création de compte sera configurée avec Firebase.',
@@ -74,7 +74,7 @@ extension _PlanoSettingsScreen on _PlanoAppState {
           Card(
             child: ListTile(
               leading: const Icon(Icons.info_outline),
-              title: const Text('Comprendre Plano'),
+              title: const Text('Comprendre Planify'),
               subtitle: const Text(
                 'Fonctions présentes, limites et prochaines étapes',
               ),
@@ -86,7 +86,7 @@ extension _PlanoSettingsScreen on _PlanoAppState {
             child: ListTile(
               leading: Icon(Icons.layers_outlined),
               title: Text('MVP local · version 1.0.0'),
-              subtitle: Text('Données de démonstration, non synchronisées'),
+              subtitle: Text('Données enregistrées sur cet appareil'),
             ),
           ),
         ],

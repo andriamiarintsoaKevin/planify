@@ -21,4 +21,8 @@ abstract interface class PlanoRepository {
   Future<WorkSchedule> loadWorkSchedule();
 
   Future<void> saveWorkSchedule(WorkSchedule schedule);
+
+  Future<bool> loadDarkMode();
+
+  Future<void> saveDarkMode(bool enabled);
 }

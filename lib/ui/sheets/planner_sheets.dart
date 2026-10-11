@@ -200,7 +200,9 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
                   style: const TextStyle(fontWeight: FontWeight.w600),
                 ),
                 subtitle: Text(
-                  '${_clock(placement.start)}–${_clock(placement.end)} · ${placement.task.project}${placement.task.durationMinutes == null ? ' · durée estimée' : ''}',
+                  '${_clock(placement.start)}–${_clock(placement.end)}'
+                  '${placement.task.project.isEmpty ? '' : ' · ${placement.task.project}'}'
+                  '${placement.task.durationMinutes == null ? ' · durée estimée' : ''}',
                 ),
                 trailing: IconButton(
                   tooltip: _lockedIds.contains(placement.task.id)

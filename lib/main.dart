@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
-import 'data/demo/demo_plano_repository.dart';
+import 'data/database_initializer.dart';
 import 'data/plano_repository.dart';
+import 'data/sqlite_planify_repository.dart';
 import 'domain/planner.dart';
 
 part 'ui/screens/today_screen.dart';
@@ -15,7 +16,9 @@ part 'ui/sheets/planner_sheets.dart';
 part 'ui/widgets/ui_helpers.dart';
 part 'ui/screens/product_guide.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializePlanifyDatabase();
   runApp(const PlanoApp());
 }
 
@@ -28,14 +31,6 @@ const _ink = Color(0xFF111827);
 const _muted = Color(0xFF6B7280);
 const _canvas = Color(0xFFF7F7FB);
 const _border = Color(0xFFE5E7EB);
-const _projectColors = <String, Color>{
-  'Studio': Color(0xFF3B82F6),
-  'Client A': Color(0xFFEC4899),
-  'Personnel': Color(0xFF22C55E),
-  'Projet': Color(0xFF8B5CF6),
-  'Marketing': Color(0xFFF97316),
-};
-
 class PlanoApp extends StatefulWidget {
   const PlanoApp({super.key, this.repository});
 
@@ -50,7 +45,7 @@ class _PlanoAppState extends State<PlanoApp> {
   TimeOfDay _workStart = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _workEnd = const TimeOfDay(hour: 18, minute: 0);
   late final PlanoRepository _repository =
-      widget.repository ?? DemoPlanoRepository();
+      widget.repository ?? SqlitePlanifyRepository();
   final _tasks = <PlanoTask>[];
   DateTime _selectedDate = _dateOnly(DateTime.now());
   List<FixedEvent> _events = [];
@@ -76,6 +71,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _repository.loadTasks(),
         _repository.loadEvents(_selectedDate),
         _repository.loadWorkSchedule(),
+        _repository.loadDarkMode(),
       ]);
       if (!mounted) return;
       final schedule = values[2] as WorkSchedule;
@@ -86,6 +82,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _events = values[1] as List<FixedEvent>;
         _workStart = _timeOfDayFromMinutes(schedule.startMinute);
         _workEnd = _timeOfDayFromMinutes(schedule.endMinute);
+        _darkMode = values[3] as bool;
         _isLoading = false;
       });
     } on Object catch (error) {
@@ -113,8 +110,13 @@ class _PlanoAppState extends State<PlanoApp> {
     }
   }
 
-  void _setDarkMode(bool enabled) {
-    setState(() => _darkMode = enabled);
+  Future<void> _setDarkMode(bool enabled) async {
+    try {
+      await _repository.saveDarkMode(enabled);
+      if (mounted) setState(() => _darkMode = enabled);
+    } on Object catch (error) {
+      _showMessage('Impossible d’enregistrer le thème : $error');
+    }
   }
 
   void _openProductGuide() {
@@ -127,7 +129,7 @@ class _PlanoAppState extends State<PlanoApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Plano',
+      title: 'Planify',
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('fr', 'FR'), Locale('en', 'US')],
       theme: _theme,

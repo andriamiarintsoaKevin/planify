@@ -15,7 +15,7 @@ class PlanoTask {
     this.status = TaskStatus.inbox,
     this.scheduledStart,
     this.scheduledEnd,
-    this.project = 'Personnel',
+    this.project = '',
     this.isLocked = false,
     this.isAiProposed = false,
     this.isDurationEstimated = false,
@@ -76,13 +76,11 @@ class FixedEvent {
     required this.title,
     required this.start,
     required this.end,
-    this.isDemo = false,
   });
 
   final String title;
   final DateTime start;
   final DateTime end;
-  final bool isDemo;
 }
 
 class TaskPlacement {

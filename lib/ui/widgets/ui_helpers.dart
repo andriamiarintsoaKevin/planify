@@ -97,7 +97,22 @@ class _PlanApproval {
   final Set<String> lockedTaskIds;
 }
 
-Color _projectColor(String project) => _projectColors[project] ?? _primary;
+const _projectPalette = <Color>[
+  Color(0xFF3B82F6),
+  Color(0xFFEC4899),
+  Color(0xFF22C55E),
+  Color(0xFF8B5CF6),
+  Color(0xFFF97316),
+];
+
+Color _projectColor(String project) {
+  if (project.isEmpty) return _primary;
+  final colorIndex = project.codeUnits.fold<int>(
+    0,
+    (sum, character) => sum + character,
+  );
+  return _projectPalette[colorIndex % _projectPalette.length];
+}
 
 Widget _badge(String label, Color background, Color foreground) => Container(
   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),

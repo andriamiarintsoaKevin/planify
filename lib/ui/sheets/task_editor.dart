@@ -84,7 +84,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     _notes = TextEditingController(text: task?.notes ?? '');
     _duration = task?.durationMinutes ?? 30;
     _priority = task?.priority ?? TaskPriority.medium;
-    _project = task?.project ?? 'Studio';
+    _project = task?.project ?? '';
     _locked = task?.isLocked ?? false;
     _deadline = task?.deadline;
   }
@@ -171,19 +171,11 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             const SizedBox(height: 14),
             const _FieldLabel('Projet'),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                for (final project in _projectColors.keys)
-                  ChoiceChip(
-                    label: Text(project),
-                    selected: _project == project,
-                    selectedColor: _projectColor(project)
-                        .withValues(alpha: .15),
-                    onSelected: (_) => setState(() => _project = project),
-                  ),
-              ],
+            TextFormField(
+              initialValue: _project,
+              textCapitalization: TextCapitalization.words,
+              decoration: _inputDecoration('Facultatif'),
+              onChanged: (value) => _project = value.trim(),
             ),
             const SizedBox(height: 20),
             const _FieldLabel('Durée estimée'),

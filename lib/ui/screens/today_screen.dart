@@ -360,7 +360,8 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                   ),
                                   if ((task.durationMinutes ?? 30) >= 45)
                                     Text(
-                                      '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)} · ${task.project}',
+                                      '${_clock(task.scheduledStart!)}–${_clock(task.scheduledEnd!)}'
+                                      '${task.project.isEmpty ? '' : ' · ${task.project}'}',
                                       style: const TextStyle(
                                         fontSize: 10,
                                         color: _muted,
@@ -436,10 +437,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
     child: ListTile(
       leading: const Icon(Icons.event_available_outlined, color: _muted),
       title: Text(event.title),
-      subtitle: Text(
-        '${_clock(event.start)}–${_clock(event.end)} · Fixe'
-        '${event.isDemo ? ' · Exemple fictif, non importé' : ''}',
-      ),
+      subtitle: Text('${_clock(event.start)}–${_clock(event.end)} · Fixe'),
       dense: true,
     ),
   );

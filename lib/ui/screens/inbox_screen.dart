@@ -50,8 +50,8 @@ extension _PlanoInboxScreen on _PlanoAppState {
             child: inbox.isEmpty
                 ? _emptyCard(
                     icon: Icons.check_circle_outline,
-                    title: 'Tout est planifié',
-                    message: 'Les nouvelles idées et tâches apparaîtront ici.',
+                    title: 'Votre Inbox est vide',
+                    message: 'Ajoutez une tâche pour commencer.',
                   )
                 : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
@@ -93,7 +93,9 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       onPressed: _openPlannerSetup,
                       icon: const Icon(Icons.auto_awesome),
                       label: Text(
-                        'Planifier automatiquement les ${inbox.length} tâches',
+                        inbox.length == 1
+                            ? 'Planifier automatiquement la tâche'
+                            : 'Planifier automatiquement les ${inbox.length} tâches',
                       ),
                       style: FilledButton.styleFrom(
                         backgroundColor: _primary,
@@ -150,11 +152,12 @@ extension _PlanoInboxScreen on _PlanoAppState {
                       spacing: 7,
                       runSpacing: 5,
                       children: [
-                        _badge(
-                          task.project,
-                          projectColor.withValues(alpha: .12),
-                          projectColor,
-                        ),
+                        if (task.project.isNotEmpty)
+                          _badge(
+                            task.project,
+                            projectColor.withValues(alpha: .12),
+                            projectColor,
+                          ),
                         _badge(_priorityLabel(task.priority), _canvas, _muted),
                         if (task.durationMinutes == null)
                           _badge(

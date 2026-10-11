@@ -1,6 +1,6 @@
-# Plano
+# Planify
 
-Plano est un prototype Flutter en français pour organiser une journée de
+Planify est une application Flutter locale en français pour organiser une journée de
 travail : capturer des tâches, préparer un planning déterministe, le prévisualiser
 et le valider, puis annuler la dernière validation.
 
@@ -18,16 +18,17 @@ et le valider, puis annuler la dernière validation.
 - Aperçu du plan, liste des tâches qui ne rentrent pas, validation et annulation
   par snapshot en mémoire.
 - Thème clair/sombre et horaires de travail modifiables.
+- Tâches et préférences enregistrées localement dans une base SQLite, conservées
+  après fermeture ou redémarrage de l’application jusqu’à leur suppression.
 
 ## Ce que l’application ne fait pas encore
 
 - Il n’y a pas de compte utilisateur, de backend, de base de données cloud ni de
-  synchronisation entre appareils. Toutes les modifications sont temporaires et
-  disparaissent à la fermeture de l’application.
-- « Point client » (11 h–11 h 45) est un faux événement fixe créé pour illustrer
-  le planificateur ; il ne provient pas d’un calendrier connecté.
-- Les tâches initiales sont des exemples modifiables. Elles ne sont pas
-  personnelles et ne sont pas synchronisées.
+  synchronisation entre appareils. Une première installation démarre sans tâche
+  ni événement. Les tâches et les réglages sont stockés sur l’appareil dans
+  SQLite. La base locale est prise en charge sur Android, iOS, macOS, Windows et
+  Linux ; la version Web ne dispose pas de cet adaptateur SQLite.
+- Aucun calendrier n’est connecté et aucun rendez-vous fictif n’est ajouté.
 - L’import de calendrier, les notifications, les abonnements, les paiements, la
   facturation, les quotas et les fonctions serveur ne sont pas implémentés.
 - L’application n’envoie pas les tâches à une IA. Le plan est calculé par le
@@ -35,7 +36,7 @@ et le valider, puis annuler la dernière validation.
 
 ## Organisation du code
 
-- `lib/main.dart` : démarrage, état de démonstration et actions applicatives.
+- `lib/main.dart` : démarrage, état applicatif et actions principales.
 - `lib/ui/screens/` : écrans Aujourd’hui, Inbox, Calendrier, Réglages et guide
   produit.
 - `lib/ui/sheets/` : capture/édition de tâche et feuilles de planification.
@@ -44,8 +45,10 @@ et le valider, puis annuler la dernière validation.
 - `lib/domain/planner.dart` : modèles de tâches et algorithme déterministe.
 - `lib/data/plano_repository.dart` : contrat asynchrone entre l’application et
   ses données.
-- `lib/data/demo/demo_plano_repository.dart` : adaptateur en mémoire utilisé
-  actuellement pour la démonstration.
+- `lib/data/sqlite_planify_repository.dart` : stockage local persistant des
+  tâches, horaires de travail et préférences.
+- `lib/data/in_memory_planify_repository.dart` : dépôt temporaire destiné aux
+  tests et aux aperçus de l’application.
 
 Les widgets d’interface sont répartis en fichiers `part` de la bibliothèque
 `main.dart` afin de garder les implémentations internes privées. Le moteur de
@@ -88,6 +91,11 @@ règles d’accès par utilisateur qui ne sont pas présents dans ce dépôt.
 La planification doit rester déterministe et testable ; un modèle de langage
 pourrait uniquement interpréter une saisie ou expliquer les résultats, après
 mise en place d’un service serveur sécurisé.
+
+## Essais manuels
+
+Suivre [TEST_MANUEL_PLANIFY.txt](./TEST_MANUEL_PLANIFY.txt) pour vérifier les
+parcours principaux dans l’application.
 
 ## License
 
