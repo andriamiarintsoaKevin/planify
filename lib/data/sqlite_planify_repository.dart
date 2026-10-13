@@ -56,6 +56,32 @@ class SqlitePlanifyRepository implements PlanoRepository {
     );
   }
 
+  @override
+  Future<String?> loadCalendarId() async {
+    final rows = await (await _db).query(
+      'calendar_settings',
+      columns: ['calendar_id'],
+      where: 'id = ?',
+      whereArgs: [1],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : rows.single['calendar_id'] as String?;
+  }
+
+  @override
+  Future<void> saveCalendarId(String? calendarId) async {
+    final database = await _db;
+    if (calendarId == null) {
+      await database.delete('calendar_settings', where: 'id = ?', whereArgs: [1]);
+      return;
+    }
+    await database.insert(
+      'calendar_settings',
+      {'id': 1, 'calendar_id': calendarId},
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
   Future<void> close() async {
     final database = _database ?? await _openingDatabase;
     if (database == null) return;
@@ -82,7 +108,7 @@ class SqlitePlanifyRepository implements PlanoRepository {
     final location = databasePath ?? await getPlanifyDatabasePath();
     return openDatabase(
       location,
-      version: 2,
+      version: 3,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE tasks (
@@ -98,7 +124,8 @@ class SqlitePlanifyRepository implements PlanoRepository {
             project TEXT NOT NULL,
             is_locked INTEGER NOT NULL,
             is_ai_proposed INTEGER NOT NULL,
-            is_duration_estimated INTEGER NOT NULL
+            is_duration_estimated INTEGER NOT NULL,
+            reminder_enabled INTEGER NOT NULL DEFAULT 0
           )
         ''');
         await database.execute('''
@@ -107,10 +134,27 @@ class SqlitePlanifyRepository implements PlanoRepository {
             value INTEGER NOT NULL
           )
         ''');
+        await database.execute('''
+          CREATE TABLE calendar_settings (
+            id INTEGER PRIMARY KEY,
+            calendar_id TEXT NOT NULL
+          )
+        ''');
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
           await database.execute('DROP TABLE IF EXISTS work_schedule');
+        }
+        if (oldVersion < 3) {
+          await database.execute(
+            'ALTER TABLE tasks ADD COLUMN reminder_enabled INTEGER NOT NULL DEFAULT 0',
+          );
+          await database.execute('''
+            CREATE TABLE calendar_settings (
+              id INTEGER PRIMARY KEY,
+              calendar_id TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -130,6 +174,7 @@ class SqlitePlanifyRepository implements PlanoRepository {
     'is_locked': task.isLocked ? 1 : 0,
     'is_ai_proposed': task.isAiProposed ? 1 : 0,
     'is_duration_estimated': task.isDurationEstimated ? 1 : 0,
+    'reminder_enabled': task.reminderEnabled ? 1 : 0,
   };
 
   PlanoTask _taskFromRow(Map<String, Object?> row) => PlanoTask(
@@ -146,6 +191,7 @@ class SqlitePlanifyRepository implements PlanoRepository {
     isLocked: row['is_locked']! as int == 1,
     isAiProposed: row['is_ai_proposed']! as int == 1,
     isDurationEstimated: row['is_duration_estimated']! as int == 1,
+    reminderEnabled: row['reminder_enabled']! as int == 1,
   );
 
   DateTime? _dateTimeFromStorage(String? value) =>

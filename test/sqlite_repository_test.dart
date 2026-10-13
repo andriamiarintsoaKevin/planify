@@ -4,8 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:path/path.dart' as path;
 import 'package:planify/data/sqlite_planify_repository.dart';
 import 'package:planify/domain/planner.dart';
-import 'package:sqflite/sqflite.dart'
-    show OpenDatabaseOptions, databaseFactory;
+import 'package:sqflite/sqflite.dart' show OpenDatabaseOptions, databaseFactory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart'
     show databaseFactoryFfi, sqfliteFfiInit;
 
@@ -44,10 +43,12 @@ void main() {
       isLocked: true,
       isAiProposed: true,
       isDurationEstimated: false,
+      reminderEnabled: true,
     );
 
     await repository.saveTasks([task]);
     await repository.saveDarkMode(true);
+    await repository.saveCalendarId('google-calendar-id');
     await repository.close();
 
     final reopenedRepository = SqlitePlanifyRepository(
@@ -68,7 +69,9 @@ void main() {
     expect(storedTask.isLocked, task.isLocked);
     expect(storedTask.isAiProposed, task.isAiProposed);
     expect(storedTask.isDurationEstimated, task.isDurationEstimated);
+    expect(storedTask.reminderEnabled, isTrue);
     expect(await reopenedRepository.loadDarkMode(), isTrue);
+    expect(await reopenedRepository.loadCalendarId(), 'google-calendar-id');
 
     await reopenedRepository.saveTasks([]);
     await reopenedRepository.close();
@@ -82,11 +85,11 @@ void main() {
 
   test('migre depuis la version précédente sans perdre les tâches', () async {
     final previousDatabase = await databaseFactory.openDatabase(
-    databasePath,
-    options: OpenDatabaseOptions(
-      version: 1,
-      onCreate: (database, version) async {
-        await database.execute('''
+      databasePath,
+      options: OpenDatabaseOptions(
+        version: 1,
+        onCreate: (database, version) async {
+          await database.execute('''
           CREATE TABLE tasks (
             id TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -103,36 +106,36 @@ void main() {
             is_duration_estimated INTEGER NOT NULL
           )
         ''');
-        await database.execute('''
+          await database.execute('''
           CREATE TABLE work_schedule (
             id INTEGER PRIMARY KEY,
             start_minute INTEGER NOT NULL,
             end_minute INTEGER NOT NULL
           )
         ''');
-        await database.execute('''
+          await database.execute('''
           CREATE TABLE preferences (
             key TEXT PRIMARY KEY,
             value INTEGER NOT NULL
           )
         ''');
-      },
-    ),
+        },
+      ),
     );
     await previousDatabase.insert('tasks', {
-    'id': 'legacy-task',
-    'title': 'Tâche à conserver',
-    'notes': '',
-    'duration_minutes': null,
-    'priority': TaskPriority.medium.name,
-    'deadline': null,
-    'status': TaskStatus.inbox.name,
-    'scheduled_start': null,
-    'scheduled_end': null,
-    'project': '',
-    'is_locked': 0,
-    'is_ai_proposed': 0,
-    'is_duration_estimated': 0,
+      'id': 'legacy-task',
+      'title': 'Tâche à conserver',
+      'notes': '',
+      'duration_minutes': null,
+      'priority': TaskPriority.medium.name,
+      'deadline': null,
+      'status': TaskStatus.inbox.name,
+      'scheduled_start': null,
+      'scheduled_end': null,
+      'project': '',
+      'is_locked': 0,
+      'is_ai_proposed': 0,
+      'is_duration_estimated': 0,
     });
     await previousDatabase.close();
 
@@ -143,18 +146,15 @@ void main() {
 
     final upgradedDatabase = await databaseFactory.openDatabase(databasePath);
     final versionRows = await upgradedDatabase.rawQuery('PRAGMA user_version');
-    expect(versionRows.single.values.single, 2);
+    expect(versionRows.single.values.single, 3);
     final tables = await upgradedDatabase.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
     );
     expect(
       tables.map((row) => row['name']),
-      containsAll(['tasks', 'preferences']),
+      containsAll(['tasks', 'preferences', 'calendar_settings']),
     );
-    expect(
-      tables.map((row) => row['name']),
-      isNot(contains('work_schedule')),
-    );
+    expect(tables.map((row) => row['name']), isNot(contains('work_schedule')));
     await upgradedDatabase.close();
   });
 }

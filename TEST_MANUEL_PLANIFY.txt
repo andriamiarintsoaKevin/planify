@@ -31,16 +31,22 @@ AVANT DE COMMENCER
 
 3. MODIFIER ET SUPPRIMER UNE TÂCHE
 ----------------------------------
-1. Toucher la tâche créée pour ouvrir son formulaire.
-2. Choisir « Planifier le » puis sélectionner une date et une heure.
-3. Ajouter un projet facultatif, par exemple « Projet personnel ».
-4. Modifier sa deadline, sa priorité et ses notes, puis enregistrer.
-5. Vérifier que la tâche apparaît au créneau choisi.
-6. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
-   vide.
+1. Toucher la tâche créée pour consulter sa fiche.
+2. Choisir « Modifier la tâche » pour ouvrir le formulaire.
+3. Choisir une durée entre 15 minutes et 4 heures, puis « Planifier le » et
+   sélectionner une date et une heure.
+4. Ajouter un projet facultatif, une priorité et des notes. Tester le rappel si
+   l’autorisation système est accordée.
+5. Enregistrer et vérifier que l’échéance est calculée depuis le début et la
+   durée, sans champ Deadline dans le formulaire.
+6. Rouvrir la fiche, appuyer sur « Modifier la tâche », choisir « Supprimer »
+   et confirmer le retour à une Inbox vide.
 7. Créer deux tâches qui se chevauchent et vérifier l’avertissement rouge.
 8. Vérifier qu’un créneau déjà passé est grisé et ne peut plus être ouvert ni
    supprimé.
+9. Depuis Aujourd’hui, faire glisser une tâche non verrouillée vers une autre
+   heure : le début et l’échéance changent, mais la durée reste identique.
+   Vérifier qu’une tâche verrouillée ne peut pas être déplacée.
 
 4. PRÉVISUALISER ET VALIDER UN PLAN
 -----------------------------------
@@ -55,12 +61,12 @@ AVANT DE COMMENCER
 7. Vérifier que les horaires déjà fixés restent inchangés et que les créneaux
    passés ne sont pas proposés.
 
-5. TESTER UNE DEADLINE ET LES RÉGLAGES
---------------------------------------
-1. Créer ou modifier une tâche et lui attribuer une deadline future.
-2. Générer un plan et vérifier que l’horaire proposé tient compte de l’échéance.
-3. Pour une tâche planifiée le 11/10/2026 à 16:00 avec une deadline le
-   12/10/2026 à 06:30, vérifier que le créneau se termine à 06:30.
+5. TESTER LE CALENDRIER ET LES RÉGLAGES
+---------------------------------------
+1. Sur Android ou iPhone, ajouter un compte Google dans les réglages système.
+2. Dans Réglages > Calendriers, connecter l’un des calendriers proposés.
+3. Vérifier que les événements du jour s’affichent comme créneaux fixes et ne
+   peuvent pas être modifiés par Planify. Déconnecter ensuite le calendrier.
 4. Vérifier que pause déjeuner, marge et priorité haute sont désactivées par
    défaut.
 5. Générer un plan en laissant ces règles désactivées : elles ne doivent pas
@@ -75,8 +81,8 @@ AVANT DE COMMENCER
 
 6. VÉRIFIER LA DURÉE DES DONNÉES
 --------------------------------
-1. Ajouter une tâche et remplir plusieurs champs : notes, projet, priorité et
-   deadline.
+1. Ajouter une tâche et remplir plusieurs champs : notes, projet, priorité,
+   durée et rappel.
 2. Enregistrer la tâche et modifier le thème.
 3. Fermer complètement puis relancer l’application.
 4. Vérifier que la tâche, tous ses champs et les réglages sont conservés.
@@ -89,7 +95,7 @@ LIMITES CONNUES
   appareils.
 - L’adaptateur SQLite est disponible sur Android, iOS, macOS, Windows et Linux,
   mais pas dans la version Web.
-- Aucun compte, serveur, calendrier externe, notification ou abonnement n’est
-  connecté.
+- Aucun compte ni serveur n’est connecté. Le calendrier système et les
+  notifications sont optionnels et nécessitent les autorisations de l’appareil.
 - La synchronisation cloud et la persistance entre appareils ne sont pas
   disponibles.

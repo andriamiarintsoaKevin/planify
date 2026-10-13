@@ -10,4 +10,8 @@ abstract interface class PlanoRepository {
   Future<bool> loadDarkMode();
 
   Future<void> saveDarkMode(bool enabled);
+
+  Future<String?> loadCalendarId();
+
+  Future<void> saveCalendarId(String? calendarId);
 }

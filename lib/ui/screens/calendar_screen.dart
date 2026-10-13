@@ -86,10 +86,7 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                           ),
                       ],
                     ),
-                    onTap: _isTaskPast(task)
-                        ? null
-                        : () => _showTaskEditor(task: task),
-                    enabled: !_isTaskPast(task),
+                    onTap: () => _showTaskDetails(task),
                   ),
                 ),
               ),
@@ -97,7 +94,9 @@ extension _PlanoCalendarScreen on _PlanoAppState {
           const SizedBox(height: 12),
           Center(
             child: Text(
-              'Aucun calendrier connecté',
+              _calendarId == null
+                  ? 'Aucun calendrier connecté'
+                  : 'Calendrier connecté · lecture seule',
               style: TextStyle(
                 fontSize: 12,
                 color: Theme.of(context).colorScheme.onSurfaceVariant,

@@ -85,7 +85,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
               top: false,
               child: Container(
                 padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                color: Theme.of(context).scaffoldBackgroundColor,
+                color: Colors.transparent,
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -132,7 +132,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
       ),
       child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        onTap: () => _showTaskEditor(task: task),
+        onTap: () => _showTaskDetails(task),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(15, 14, 10, 14),
           child: Row(

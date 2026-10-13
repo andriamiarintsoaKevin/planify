@@ -19,6 +19,7 @@ class PlanoTask {
     this.isLocked = false,
     this.isAiProposed = false,
     this.isDurationEstimated = false,
+    this.reminderEnabled = false,
   });
 
   final String id;
@@ -34,6 +35,7 @@ class PlanoTask {
   final bool isLocked;
   final bool isAiProposed;
   final bool isDurationEstimated;
+  final bool reminderEnabled;
 
   PlanoTask copyWith({
     String? title,
@@ -48,6 +50,7 @@ class PlanoTask {
     bool? isLocked,
     bool? isAiProposed,
     bool? isDurationEstimated,
+    bool? reminderEnabled,
     bool clearDeadline = false,
     bool clearSchedule = false,
   }) {
@@ -67,6 +70,7 @@ class PlanoTask {
       isLocked: isLocked ?? this.isLocked,
       isAiProposed: isAiProposed ?? this.isAiProposed,
       isDurationEstimated: isDurationEstimated ?? this.isDurationEstimated,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
     );
   }
 }

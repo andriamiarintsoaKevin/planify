@@ -9,12 +9,15 @@ valider, puis annuler la dernière validation.
 - Écrans Aujourd’hui, Inbox, Calendrier et Réglages.
 - L’Inbox est la boîte des tâches non planifiées ; une tâche quitte l’Inbox
   après validation d’un créneau.
-- Création et édition de tâches avec projet, deadline, priorité, notes et
-  verrouillage de créneaux déjà planifiés. Lorsqu’une tâche planifiée a une
-  deadline ultérieure à son heure de début, son créneau se termine à la deadline.
+- Création et édition de tâches avec projet, durée de 15 minutes à 4 heures,
+  priorité, notes, rappel local facultatif et verrouillage des créneaux.
+  L’échéance d’une tâche planifiée est automatiquement calculée depuis son
+  début et sa durée.
 - Les tâches sont différenciées par priorité : basse en vert, normale en indigo
   et haute en rouge, avec des teintes adaptées au thème clair ou sombre.
-- Planification manuelle d’une tâche à une date et une heure choisies. Les
+- Planification manuelle d’une tâche à une date et une heure choisies, ainsi
+  que déplacement par glisser-déposer des tâches non verrouillées dans le
+  calendrier sans modifier leur durée. Les
   chevauchements sont autorisés et signalés en rouge ; les tâches terminées
   restent visibles en grisé et ne peuvent plus être modifiées ou supprimées.
 - Planification locale des tâches de l’Inbox sans horaire, à partir de l’heure
@@ -36,9 +39,12 @@ valider, puis annuler la dernière validation.
   ni événement. Les tâches et les réglages sont stockés sur l’appareil dans
   SQLite. La base locale est prise en charge sur Android, iOS, macOS, Windows et
   Linux ; la version Web ne dispose pas de cet adaptateur SQLite.
-- Aucun calendrier n’est connecté et aucun rendez-vous fictif n’est ajouté.
-- L’import de calendrier, les notifications, les abonnements, les paiements, la
-  facturation, les quotas et les fonctions serveur ne sont pas implémentés.
+- Les calendriers présents sur l’appareil peuvent être connectés en lecture
+  seule sur Android et iOS. Un calendrier Google doit d’abord être synchronisé
+  dans les réglages système de l’appareil. Planify ne modifie aucun événement.
+- Les rappels locaux des tâches planifiées sont facultatifs et demandent
+  l’autorisation du système. Les abonnements, paiements, facturation, quotas et
+  fonctions serveur ne sont pas implémentés.
 - L’application n’envoie pas les tâches à une IA. Le plan est calculé par le
   moteur local déterministe.
 
@@ -75,9 +81,9 @@ flutter analyze
 
 ## Intégrations non incluses
 
-La synchronisation calendrier affichée est indicative. Les intégrations SaaS
-nécessitent un backend, une configuration de projet, des identifiants et des
-règles d’accès par utilisateur qui ne sont pas présents dans ce dépôt.
+La connexion calendrier lit les calendriers fournis par le système mobile et
+ne nécessite pas d’identifiants OAuth Planify. Elle ne synchronise pas les
+tâches entre appareils.
 
 ## Étapes proposées pour une version SaaS
 

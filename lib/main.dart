@@ -1,12 +1,17 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'data/database_initializer.dart';
+import 'data/device_calendar_service.dart';
+import 'data/local_reminder_service.dart';
 import 'data/plano_repository.dart';
 import 'data/sqlite_planify_repository.dart';
 import 'domain/planner.dart';
+
+import 'package:device_calendar_plus/device_calendar_plus.dart' show Calendar;
 
 part 'ui/screens/today_screen.dart';
 part 'ui/screens/inbox_screen.dart';
@@ -14,6 +19,7 @@ part 'ui/screens/calendar_screen.dart';
 part 'ui/screens/settings_screen.dart';
 part 'ui/theme/app_theme.dart';
 part 'ui/sheets/task_editor.dart';
+part 'ui/sheets/task_details.dart';
 part 'ui/sheets/planner_sheets.dart';
 part 'ui/widgets/ui_helpers.dart';
 part 'ui/screens/product_guide.dart';
@@ -21,6 +27,7 @@ part 'ui/screens/product_guide.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializePlanifyDatabase();
+  await LocalReminderService().initialize();
   runApp(const PlanoApp());
 }
 
@@ -45,9 +52,13 @@ class _PlanoAppState extends State<PlanoApp> {
   bool _darkMode = false;
   late final PlanoRepository _repository =
       widget.repository ?? SqlitePlanifyRepository();
+  final _calendarService = DeviceCalendarService();
+  final _reminderService = LocalReminderService();
   final _tasks = <PlanoTask>[];
   DateTime _selectedDate = _dateOnly(DateTime.now());
   List<FixedEvent> _events = [];
+  String? _calendarId;
+  final _timelineKey = GlobalKey();
   int _tabIndex = 0;
   List<PlanoTask>? _lastSnapshot;
   BuildContext? _appContext;
@@ -76,10 +87,11 @@ class _PlanoAppState extends State<PlanoApp> {
       _loadError = null;
     });
     try {
-      final values = await Future.wait<Object>([
+      final values = await Future.wait<Object?>([
         _repository.loadTasks(),
         _repository.loadEvents(_selectedDate),
         _repository.loadDarkMode(),
+        _repository.loadCalendarId(),
       ]);
       if (!mounted) return;
       setState(() {
@@ -88,8 +100,29 @@ class _PlanoAppState extends State<PlanoApp> {
           ..addAll(values[0] as List<PlanoTask>);
         _events = values[1] as List<FixedEvent>;
         _darkMode = values[2] as bool;
+        _calendarId = values[3] as String?;
         _isLoading = false;
       });
+      if (_calendarId != null) {
+        try {
+          final calendarEvents = await _calendarService.loadEvents(
+            _calendarId!,
+            _selectedDate,
+          );
+          if (mounted) {
+            setState(() => _events = [..._events, ...calendarEvents]);
+          }
+        } on Object catch (error) {
+          if (mounted) {
+            _showMessage('Calendrier non actualisé : $error');
+          }
+        }
+      }
+      try {
+        await _syncAllReminders();
+      } on Object catch (error) {
+        if (mounted) _showMessage('Rappels non actualisés : $error');
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -105,7 +138,15 @@ class _PlanoAppState extends State<PlanoApp> {
       _selectedDate = selectedDate;
     });
     try {
-      final events = await _repository.loadEvents(selectedDate);
+      final events = <FixedEvent>[
+        ...await _repository.loadEvents(selectedDate),
+      ];
+      final calendarId = _calendarId;
+      if (calendarId != null) {
+        events.addAll(
+          await _calendarService.loadEvents(calendarId, selectedDate),
+        );
+      }
       if (!mounted || !_sameDay(_selectedDate, selectedDate)) return;
       setState(() => _events = events);
     } on Object catch (error) {
@@ -216,8 +257,11 @@ class _PlanoAppState extends State<PlanoApp> {
       context: _appContext!,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) =>
-          _TaskEditorSheet(task: task, initialScheduleDate: _selectedDate),
+      builder: (context) => _TaskEditorSheet(
+        task: task,
+        initialScheduleDate: _selectedDate,
+        remindersAvailable: _reminderService.isAvailable,
+      ),
     );
     if (result == null) return;
     if (task != null && _isTaskPast(task)) {
@@ -237,6 +281,21 @@ class _PlanoAppState extends State<PlanoApp> {
       return;
     }
     final updated = result.task!;
+    String? reminderPermissionIssue;
+    if (updated.reminderEnabled &&
+        !(task?.reminderEnabled ?? false) &&
+        _reminderService.isAvailable) {
+      try {
+        final permissionGranted = await _reminderService.requestPermission();
+        if (!permissionGranted) {
+          reminderPermissionIssue =
+              'les notifications sont désactivées sur cet appareil';
+        }
+      } on Object catch (error) {
+        reminderPermissionIssue =
+            'impossible de demander l’autorisation de notification : $error';
+      }
+    }
     setState(() {
       final index = _tasks.indexWhere((item) => item.id == updated.id);
       if (index < 0) {
@@ -252,8 +311,13 @@ class _PlanoAppState extends State<PlanoApp> {
       );
       return;
     }
+    final savedMessage = task == null
+        ? 'Tâche ajoutée à l’Inbox'
+        : 'Tâche mise à jour';
     _showMessage(
-      task == null ? 'Tâche ajoutée à l’Inbox' : 'Tâche mise à jour',
+      reminderPermissionIssue == null
+          ? savedMessage
+          : '$savedMessage, mais $reminderPermissionIssue',
     );
   }
 
@@ -280,17 +344,10 @@ class _PlanoAppState extends State<PlanoApp> {
       return;
     }
     final dayStart = _sameDay(date, today)
-        ? DateTime(
-            now.year,
-            now.month,
-            now.day,
-            now.hour,
-            now.minute,
-          ).add(
+        ? DateTime(now.year, now.month, now.day, now.hour, now.minute).add(
             Duration(
-              minutes: now.second > 0 ||
-                      now.millisecond > 0 ||
-                      now.microsecond > 0
+              minutes:
+                  now.second > 0 || now.millisecond > 0 || now.microsecond > 0
                   ? 1
                   : 0,
             ),
@@ -321,7 +378,9 @@ class _PlanoAppState extends State<PlanoApp> {
       if (onlyTask.status != TaskStatus.inbox ||
           onlyTask.scheduledStart != null ||
           onlyTask.scheduledEnd != null) {
-        _showMessage('Seules les tâches sans horaire peuvent être réorganisées');
+        _showMessage(
+          'Seules les tâches sans horaire peuvent être réorganisées',
+        );
         return;
       }
       selectedTasks.add(onlyTask);
@@ -366,7 +425,11 @@ class _PlanoAppState extends State<PlanoApp> {
           dayStart: dayStart,
           dayEnd: _atTime(date, 24, 0),
           lunchStart: options.respectLunch ? _atTime(date, 12, 30) : null,
-          lunchEnd: options.respectLunch ? _atTime(date, 13, 30) : null,
+          lunchEnd: options.respectLunch
+              ? _atTime(date, 12, 30).add(
+                  Duration(minutes: options.lunchDurationMinutes),
+                )
+              : null,
           bufferMinutes: options.addBuffer ? 10 : 0,
           prioritizeHighPriority: options.prioritizeHighPriority,
         ),
@@ -397,6 +460,7 @@ class _PlanoAppState extends State<PlanoApp> {
           status: TaskStatus.scheduled,
           scheduledStart: placement.start,
           scheduledEnd: placement.end,
+          deadline: placement.end,
           isAiProposed: false,
           durationMinutes: placement.task.durationMinutes ?? 30,
           isDurationEstimated: placement.task.durationMinutes == null,
@@ -409,6 +473,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _tasks[index] = _tasks[index].copyWith(
           status: TaskStatus.inbox,
           clearSchedule: true,
+          clearDeadline: true,
         );
       }
     });
@@ -443,24 +508,17 @@ class _PlanoAppState extends State<PlanoApp> {
     }
     setState(() => _tasks.removeWhere((item) => item.id == task.id));
     if (!await _persistTasks()) return;
-    _showMessage('Tâche supprimée');
-  }
-
-  Future<void> _toggleTaskLock(PlanoTask task) async {
-    if (_isTaskPast(task)) {
-      _showMessage('Cette tâche passée ne peut plus être modifiée');
-      return;
+    String? reminderIssue;
+    try {
+      await _reminderService.cancelTask(task);
+    } on Object catch (error) {
+      reminderIssue = 'rappel non annulé : $error';
     }
-    setState(() {
-      final index = _tasks.indexWhere((item) => item.id == task.id);
-      if (index >= 0) {
-        _tasks[index] = _tasks[index].copyWith(
-          isLocked: !_tasks[index].isLocked,
-        );
-      }
-    });
-    if (!await _persistTasks()) return;
-    _showMessage(task.isLocked ? 'Horaire déverrouillé' : 'Horaire verrouillé');
+    _showMessage(
+      reminderIssue == null
+          ? 'Tâche supprimée'
+          : 'Tâche supprimée, mais $reminderIssue',
+    );
   }
 
   Future<void> _chooseDate() async {
@@ -479,6 +537,15 @@ class _PlanoAppState extends State<PlanoApp> {
   Future<bool> _persistTasks() async {
     try {
       await _repository.saveTasks(List.unmodifiable(_tasks));
+      try {
+        await _syncAllReminders();
+      } on Object catch (error) {
+        if (mounted) {
+          _showMessage(
+            'Tâches enregistrées, mais rappels non actualisés : $error',
+          );
+        }
+      }
       return true;
     } on Object catch (error) {
       if (mounted) {
@@ -486,6 +553,149 @@ class _PlanoAppState extends State<PlanoApp> {
       }
       return false;
     }
+  }
+
+  Future<void> _syncAllReminders() async {
+    if (!_reminderService.isAvailable) return;
+    for (final task in _tasks) {
+      await _reminderService.syncTask(task);
+    }
+  }
+
+  Future<void> _connectCalendar() async {
+    if (defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      _showMessage(
+        'La connexion au calendrier est disponible sur Android et iPhone.',
+      );
+      return;
+    }
+    try {
+      final calendars = await _calendarService.requestAccessAndLoadCalendars();
+      if (!mounted) return;
+      if (calendars.isEmpty) {
+        _showMessage(
+          'Aucun calendrier trouvé. Ajoutez un compte Google dans les réglages de votre appareil.',
+        );
+        return;
+      }
+      final selected = await showModalBottomSheet<Calendar>(
+        context: _appContext!,
+        builder: (context) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(
+                title: Text('Choisir un calendrier'),
+                subtitle: Text(
+                  'Les événements seront consultés en lecture seule.',
+                ),
+              ),
+              for (final calendar in calendars)
+                Material(
+                  color: Colors.transparent,
+                  child: ListTile(
+                    leading: const Icon(Icons.calendar_month_outlined),
+                    title: Text(calendar.name),
+                    subtitle: Text(
+                      [calendar.accountName, calendar.accountType]
+                          .whereType<String>()
+                          .where((value) => value.isNotEmpty)
+                          .join(' · '),
+                    ),
+                    onTap: () => Navigator.pop(context, calendar),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+      final selectedCalendarId = selected?.id;
+      if (selectedCalendarId == null) return;
+      await _repository.saveCalendarId(selectedCalendarId);
+      if (!mounted) return;
+      setState(() => _calendarId = selectedCalendarId);
+      await _selectDate(_selectedDate);
+      _showMessage('Calendrier connecté en lecture seule');
+    } on Object catch (error) {
+      _showMessage('Impossible de connecter le calendrier : $error');
+    }
+  }
+
+  Future<void> _disconnectCalendar() async {
+    try {
+      await _repository.saveCalendarId(null);
+      final localEvents = await _repository.loadEvents(_selectedDate);
+      if (!mounted) return;
+      setState(() {
+        _calendarId = null;
+        _events = localEvents;
+      });
+      _showMessage('Calendrier déconnecté');
+    } on Object catch (error) {
+      _showMessage('Impossible de déconnecter le calendrier : $error');
+    }
+  }
+
+  Future<void> _showTaskDetails(PlanoTask task) async {
+    await showModalBottomSheet<void>(
+      context: _appContext!,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => _TaskDetailsSheet(
+        task: task,
+        canEdit: !_isTaskPast(task),
+        onEdit: () {
+          Navigator.pop(context);
+          Future<void>.delayed(
+            Duration.zero,
+            () => _showTaskEditor(task: task),
+          );
+        },
+      ),
+    );
+  }
+
+  void _handleTimelineDrop(DragTargetDetails<PlanoTask> details) {
+    final renderObject =
+        _timelineKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderObject == null) return;
+    final localOffset = renderObject.globalToLocal(details.offset);
+    final minutes = ((localOffset.dy / 72 * 60) / 15).round() * 15;
+    final start = _atTime(_selectedDate, 0, minutes);
+    _moveTask(details.data, start);
+  }
+
+  Future<void> _moveTask(PlanoTask task, DateTime start) async {
+    if (task.isLocked) {
+      _showMessage('Déverrouillez cette tâche avant de la déplacer');
+      return;
+    }
+    if (_isTaskPast(task) || start.isBefore(DateTime.now())) {
+      _showMessage('Une tâche passée ne peut pas être déplacée');
+      return;
+    }
+    final duration = task.durationMinutes ?? 30;
+    final end = start.add(Duration(minutes: duration));
+    if (end.isAfter(_atTime(_selectedDate, 24, 0))) {
+      _showMessage('La tâche doit se terminer avant minuit');
+      return;
+    }
+    setState(() {
+      final index = _tasks.indexWhere((item) => item.id == task.id);
+      if (index >= 0) {
+        _tasks[index] = _tasks[index].copyWith(
+          status: TaskStatus.scheduled,
+          scheduledStart: start,
+          scheduledEnd: end,
+          deadline: end,
+        );
+      }
+    });
+    if (!await _persistTasks()) return;
+    _showMessage(
+      'Tâche déplacée · durée conservée à ${_durationLabel(duration)}',
+    );
   }
 
   void _showMessage(String message) {

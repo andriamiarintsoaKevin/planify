@@ -4,6 +4,7 @@ import 'plano_repository.dart';
 class InMemoryPlanifyRepository implements PlanoRepository {
   List<PlanoTask> _tasks = [];
   bool _darkMode = false;
+  String? _calendarId;
 
   @override
   Future<List<PlanoTask>> loadTasks() async => List.unmodifiable(_tasks);
@@ -23,5 +24,13 @@ class InMemoryPlanifyRepository implements PlanoRepository {
   @override
   Future<void> saveDarkMode(bool enabled) async {
     _darkMode = enabled;
+  }
+
+  @override
+  Future<String?> loadCalendarId() async => _calendarId;
+
+  @override
+  Future<void> saveCalendarId(String? calendarId) async {
+    _calendarId = calendarId;
   }
 }

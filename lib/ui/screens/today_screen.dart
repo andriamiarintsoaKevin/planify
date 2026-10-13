@@ -278,142 +278,212 @@ extension _PlanoTodayScreen on _PlanoAppState {
           event.end.isAfter(dayStart) &&
           event.start.isBefore(_atTime(_selectedDate, 24, 0)),
     );
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      child: SizedBox(
-        height: 24 * hourHeight,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final timelineWidth = constraints.maxWidth - 56;
-            return Stack(
-              children: [
-                for (var hour = 0; hour <= 24; hour++)
-                  Positioned(
-                    top: hour * hourHeight,
-                    left: 8,
-                    right: 8,
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        SizedBox(
-                          width: 42,
-                          child: Text(
-                            '${(dayStartHour + hour).toString().padLeft(2, '0')}:00',
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .onSurfaceVariant,
-                              fontWeight: FontWeight.w500,
+    return DragTarget<PlanoTask>(
+      onWillAcceptWithDetails: (details) => !details.data.isLocked,
+      onAcceptWithDetails: _handleTimelineDrop,
+      builder: (context, candidates, rejected) => Card(
+        key: _timelineKey,
+        clipBehavior: Clip.antiAlias,
+        child: SizedBox(
+          height: 24 * hourHeight,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final timelineWidth = constraints.maxWidth - 56;
+              return Stack(
+                children: [
+                  for (var hour = 0; hour <= 24; hour++)
+                    Positioned(
+                      top: hour * hourHeight,
+                      left: 8,
+                      right: 8,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            width: 42,
+                            child: Text(
+                              '${(dayStartHour + hour).toString().padLeft(2, '0')}:00',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant,
+                                fontWeight: FontWeight.w500,
+                              ),
                             ),
                           ),
-                        ),
-                        Expanded(
-                          child: Container(
-                            height: 1,
-                            color: Theme.of(context).dividerColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                for (final event in visibleEvents)
-                  _positionedTimelineBlock(
-                    start: event.start,
-                    duration: event.end.difference(event.start).inMinutes,
-                    dayStart: dayStart,
-                    left: 54,
-                    width: timelineWidth,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .surfaceContainerHighest,
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.event_outlined,
-                          size: 15,
-                          color: Theme.of(context).colorScheme.onSurfaceVariant,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            '${event.title} · ${_clock(event.start)}–${_clock(event.end)}',
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: Theme.of(context).colorScheme.onSurface,
+                          Expanded(
+                            child: Container(
+                              height: 1,
+                              color: Theme.of(context).dividerColor,
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                for (final task in scheduled)
-                  if (task.scheduledStart != null &&
-                      task.scheduledEnd != null &&
-                      taskOverlapsDay(task, _selectedDate))
+                  for (final event in visibleEvents)
                     _positionedTimelineBlock(
-                      start: taskVisibleStartOnDay(task, _selectedDate),
-                      duration: taskDurationOnDay(task, _selectedDate),
+                      start: event.start,
+                      duration: event.end.difference(event.start).inMinutes,
                       dayStart: dayStart,
-                      left:
-                          54 +
-                          (overlapLaneByTaskId.containsKey(task.id)
-                              ? overlapLaneByTaskId[task.id]! *
-                                    timelineWidth /
-                                    overlapLaneCount
-                              : 0),
-                      width: overlapLaneByTaskId.containsKey(task.id)
-                          ? timelineWidth / overlapLaneCount
-                          : timelineWidth,
-                      color: _priorityColor(context, task.priority),
-                      isTaskBubble: true,
-                      child: Opacity(
-                        opacity: _isTaskPast(task) ? 0.45 : 1,
-                        child: InkWell(
-                          onTap: _isTaskPast(task)
-                              ? null
-                              : () => _showTaskEditor(task: task),
-                          onLongPress: _isTaskPast(task)
-                              ? null
-                              : () => _toggleTaskLock(task),
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 9,
-                              vertical: 5,
+                      left: 54,
+                      width: timelineWidth,
+                      color: Theme.of(context)
+                          .colorScheme
+                          .surfaceContainerHighest,
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.event_outlined,
+                            size: 15,
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onSurfaceVariant,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              '${event.title} · ${_clock(event.start)}–${_clock(event.end)}',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: Theme.of(context).colorScheme.onSurface,
+                              ),
                             ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Row(
+                          ),
+                        ],
+                      ),
+                    ),
+                  for (final task in scheduled)
+                    if (task.scheduledStart != null &&
+                        task.scheduledEnd != null &&
+                        taskOverlapsDay(task, _selectedDate))
+                      _positionedTimelineBlock(
+                        start: taskVisibleStartOnDay(task, _selectedDate),
+                        duration: taskDurationOnDay(task, _selectedDate),
+                        dayStart: dayStart,
+                        left:
+                            54 +
+                            (overlapLaneByTaskId.containsKey(task.id)
+                                ? overlapLaneByTaskId[task.id]! *
+                                      timelineWidth /
+                                      overlapLaneCount
+                                : 0),
+                        width: overlapLaneByTaskId.containsKey(task.id)
+                            ? timelineWidth / overlapLaneCount
+                            : timelineWidth,
+                        color: _priorityColor(context, task.priority),
+                        isTaskBubble: true,
+                        child: Opacity(
+                          opacity: _isTaskPast(task) ? 0.45 : 1,
+                          child: LongPressDraggable<PlanoTask>(
+                            data: task,
+                            maxSimultaneousDrags:
+                                task.isLocked || _isTaskPast(task) ? 0 : 1,
+                            feedback: Material(
+                              color: Colors.transparent,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _priorityColor(context, task.priority),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  task.title,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            childWhenDragging: const SizedBox.shrink(),
+                            child: InkWell(
+                              onTap: () => _showTaskDetails(task),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 9,
+                                  vertical: 1,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    if (task.scheduledStart!.isBefore(
-                                      taskVisibleStartOnDay(
-                                        task,
-                                        _selectedDate,
-                                      ),
-                                    ))
-                                      Padding(
-                                        padding: EdgeInsets.only(right: 4),
-                                        child: Icon(
-                                          Icons.subdirectory_arrow_right,
-                                          size: 13,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
+                                    Row(
+                                      children: [
+                                        if (task.scheduledStart!.isBefore(
+                                          taskVisibleStartOnDay(
+                                            task,
+                                            _selectedDate,
+                                          ),
+                                        ))
+                                          Padding(
+                                            padding: EdgeInsets.only(right: 4),
+                                            child: Icon(
+                                              Icons.subdirectory_arrow_right,
+                                              size: 13,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            task.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: Color.fromARGB(
+                                                255,
+                                                47,
+                                                43,
+                                                43,
+                                              ),
+                                            ),
+                                          ),
                                         ),
-                                      ),
-                                    Expanded(
-                                      child: Text(
-                                        task.title,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
+                                        if (task.isLocked)
+                                          Padding(
+                                            padding: EdgeInsets.only(left: 4),
+                                            child: Icon(
+                                              Icons.lock_outline,
+                                              size: 13,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurfaceVariant,
+                                            ),
+                                          ),
+                                        if (_hasScheduleConflict(task))
+                                          const Padding(
+                                            padding: EdgeInsets.only(left: 3),
+                                            child: Icon(
+                                              Icons.warning_amber_rounded,
+                                              size: 15,
+                                              color: _danger,
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                    if (taskDurationOnDay(
+                                          task,
+                                          _selectedDate,
+                                        ) >=
+                                        40)
+                                      Text(
+                                        _taskTimeRangeOnDay(
+                                          task,
+                                          _selectedDate,
+                                        ),
+                                        style: TextStyle(
+                                          fontSize: 10,
                                           color: Color.fromARGB(
                                             255,
                                             47,
@@ -422,64 +492,34 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                           ),
                                         ),
                                       ),
-                                    ),
-                                    if (task.isLocked)
-                                      Padding(
-                                        padding: EdgeInsets.only(left: 4),
-                                        child: Icon(
-                                          Icons.lock_outline,
-                                          size: 13,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .onSurfaceVariant,
-                                        ),
-                                      ),
-                                    if (_hasScheduleConflict(task))
-                                      const Padding(
-                                        padding: EdgeInsets.only(left: 3),
-                                        child: Icon(
-                                          Icons.warning_amber_rounded,
-                                          size: 15,
-                                          color: _danger,
-                                        ),
-                                      ),
                                   ],
                                 ),
-                                if (taskDurationOnDay(task, _selectedDate) >=
-                                    40)
-                                  Text(
-                                    _taskTimeRangeOnDay(task, _selectedDate),
-                                    style: TextStyle(
-                                      fontSize: 10,
-                                      color: Color.fromARGB(255, 47, 43, 43),
-                                    ),
-                                  ),
-                              ],
+                              ),
                             ),
                           ),
                         ),
                       ),
+                  if (_sameDay(_selectedDate, DateTime.now()))
+                    Positioned(
+                      top:
+                          (DateTime.now().hour * 60 +
+                              DateTime.now().minute -
+                              dayStartHour * 60) /
+                          60 *
+                          hourHeight,
+                      left: 52,
+                      right: 8,
+                      child: const Row(
+                        children: [
+                          Icon(Icons.circle, size: 8, color: _danger),
+                          Expanded(child: Divider(color: _danger, height: 1)),
+                        ],
+                      ),
                     ),
-                if (_sameDay(_selectedDate, DateTime.now()))
-                  Positioned(
-                    top:
-                        (DateTime.now().hour * 60 +
-                            DateTime.now().minute -
-                            dayStartHour * 60) /
-                        60 *
-                        hourHeight,
-                    left: 52,
-                    right: 8,
-                    child: const Row(
-                      children: [
-                        Icon(Icons.circle, size: 8, color: _danger),
-                        Expanded(child: Divider(color: _danger, height: 1)),
-                      ],
-                    ),
-                  ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

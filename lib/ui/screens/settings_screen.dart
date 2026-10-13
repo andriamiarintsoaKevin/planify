@@ -48,16 +48,34 @@ extension _PlanoSettingsScreen on _PlanoAppState {
           Card(
             child: ListTile(
               leading: const Icon(Icons.calendar_month_outlined),
-              title: const Text('Calendrier de l’iPhone'),
-              subtitle: const Text('Lecture seule · non connecté'),
-              trailing: TextButton(
-                onPressed: () => _showMessage(
-                  'La connexion réelle au calendrier nécessite la configuration native iOS.',
-                ),
-                child: const Text('Connecter'),
+              title: const Text('Calendrier Google / appareil'),
+              subtitle: Text(
+                _calendarId == null
+                    ? 'Non connecté · lecture seule'
+                    : 'Connecté · événements importés en lecture seule',
               ),
+              trailing: _calendarId == null
+                  ? TextButton(
+                      onPressed: _connectCalendar,
+                      child: const Text('Connecter'),
+                    )
+                  : TextButton(
+                      onPressed: _disconnectCalendar,
+                      child: const Text('Déconnecter'),
+                    ),
+              onTap: _calendarId == null ? _connectCalendar : null,
             ),
           ),
+          if (_calendarId == null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Text(
+                'Ajoutez votre compte Google dans les réglages système avant de connecter un calendrier. Planify ne crée ni ne modifie aucun événement.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ),
           const SizedBox(height: 14),
           const _SettingsHeader('À propos'),
           Card(
@@ -74,7 +92,7 @@ extension _PlanoSettingsScreen on _PlanoAppState {
           const Card(
             child: ListTile(
               leading: Icon(Icons.layers_outlined),
-              title: Text('MVP local · version 1.0.0'),
+              title: Text('MVP local · version 1.0.1'),
               subtitle: Text('Données enregistrées sur cet appareil'),
             ),
           ),

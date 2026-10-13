@@ -24,6 +24,10 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Planify consulte vos calendriers pour éviter de planifier une tâche pendant un événement.</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Planify consulte vos calendriers en lecture seule pour afficher vos événements et organiser vos tâches.</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

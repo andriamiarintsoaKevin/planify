@@ -80,11 +80,13 @@ class _TaskFormResult {
 class _PlannerOptions {
   const _PlannerOptions({
     required this.respectLunch,
+    required this.lunchDurationMinutes,
     required this.prioritizeHighPriority,
     required this.addBuffer,
   });
 
   final bool respectLunch;
+  final int lunchDurationMinutes;
   final bool prioritizeHighPriority;
   final bool addBuffer;
 }
@@ -167,11 +169,13 @@ String _priorityLabel(TaskPriority priority) => switch (priority) {
   TaskPriority.high => 'Haute',
 };
 
-String _durationLabel(int minutes) => minutes == 60
-    ? '1 h'
-    : minutes == 120
-    ? '2 h'
-    : '$minutes min';
+String _durationLabel(int minutes) {
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  if (hours == 0) return '$minutes min';
+  if (remainingMinutes == 0) return '$hours h';
+  return '$hours h $remainingMinutes min';
+}
 
 String _clock(DateTime dateTime) =>
     '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
