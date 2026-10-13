@@ -478,12 +478,11 @@ class _PlanoAppState extends State<PlanoApp> {
       }
     });
     if (!await _persistTasks()) return;
-    ScaffoldMessenger.of(_appContext!).showSnackBar(
-      SnackBar(
-        content: const Text('Planning modifié'),
-        duration: const Duration(seconds: 2),
-        action: SnackBarAction(label: 'Annuler', onPressed: _undoLastPlan),
-      ),
+    _showTopNotification(
+      _appContext!,
+      'Planning modifié',
+      actionLabel: 'Annuler',
+      onAction: _undoLastPlan,
     );
     setState(() => _tabIndex = 0);
   }
@@ -699,11 +698,7 @@ class _PlanoAppState extends State<PlanoApp> {
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(_appContext!)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
-      );
+    _showTopNotification(_appContext!, message);
   }
 
   bool _isTaskPast(PlanoTask task) => isTaskPast(task, DateTime.now());

@@ -84,7 +84,9 @@ class _TaskEditorSheet extends StatefulWidget {
 class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   late final TextEditingController _title;
   late final TextEditingController _notes;
+  late final TextEditingController _durationController;
   late int _duration;
+  bool _durationInHours = false;
   late TaskPriority _priority;
   late String _project;
   late bool _locked;
@@ -103,6 +105,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
         : storedDuration > 240
         ? 240
         : storedDuration;
+    _durationController = TextEditingController(text: '$_duration');
     _priority = task?.priority ?? TaskPriority.medium;
     _project = task?.project ?? '';
     _locked = task?.isLocked ?? false;
@@ -114,6 +117,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   void dispose() {
     _title.dispose();
     _notes.dispose();
+    _durationController.dispose();
     super.dispose();
   }
 
@@ -201,19 +205,29 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
             const SizedBox(height: 8),
             TextFormField(
               key: const ValueKey('task-duration-input'),
-              initialValue: '$_duration',
-              keyboardType: TextInputType.number,
+              controller: _durationController,
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: _durationInHours,
+              ),
               decoration: _inputDecoration('Ex. 30', context).copyWith(
                 prefixIcon: const Icon(Icons.schedule_outlined),
-                suffixText: 'min',
+                suffixText: _durationInHours ? 'h' : 'min',
               ),
-              onChanged: (value) {
-                _duration = int.tryParse(value) ?? 0;
-              },
+              onChanged: _updateDuration,
+            ),
+            const SizedBox(height: 10),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Minutes')),
+                ButtonSegment(value: true, label: Text('Heures')),
+              ],
+              selected: {_durationInHours},
+              onSelectionChanged: (selection) =>
+                  _changeDurationUnit(selection.first),
             ),
             const SizedBox(height: 5),
             Text(
-              'La durée ne peut pas dépasser 4 heures (minimum : 15 minutes).',
+              'De 15 min à 4 h. Une durée en heures peut être décimale, par exemple 1,5 h.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
@@ -416,11 +430,37 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     );
   }
 
-  void _showFormMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+  void _updateDuration(String value) {
+    if (_durationInHours) {
+      final hours = double.tryParse(value.replaceAll(',', '.'));
+      _duration = hours == null || !hours.isFinite ? 0 : (hours * 60).round();
+    } else {
+      _duration = int.tryParse(value) ?? 0;
+    }
+  }
+
+  void _changeDurationUnit(bool inHours) {
+    _updateDuration(_durationController.text);
+    setState(() {
+      _durationInHours = inHours;
+      _durationController.text = inHours
+          ? _formatHours(_duration)
+          : '$_duration';
+      _durationController.selection = TextSelection.collapsed(
+        offset: _durationController.text.length,
       );
+    });
+  }
+
+  String _formatHours(int durationMinutes) {
+    final hours = durationMinutes / 60;
+    return hours
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'\.?0+$'), '')
+        .replaceAll('.', ',');
+  }
+
+  void _showFormMessage(String message) {
+    _showTopNotification(context, message);
   }
 }

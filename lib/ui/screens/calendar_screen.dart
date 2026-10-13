@@ -49,9 +49,7 @@ extension _PlanoCalendarScreen on _PlanoAppState {
             for (final event in _events) _eventTile(event),
             for (final task in scheduled)
               Card(
-                color: _isTaskPast(task)
-                    ? Theme.of(context).colorScheme.surfaceContainer
-                    : null,
+                color: _isTaskPast(task) ? Colors.transparent : null,
                 child: Opacity(
                   opacity: _isTaskPast(task) ? 0.45 : 1,
                   child: ListTile(

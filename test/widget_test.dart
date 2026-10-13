@@ -5,6 +5,30 @@ import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
 
 void main() {
+  testWidgets('affiche les notifications en haut avec une progression', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter').last);
+    await tester.pump();
+
+    expect(find.text('Saisissez un titre pour la tâche'), findsOneWidget);
+    final progressFinder = find.byType(LinearProgressIndicator);
+    expect(progressFinder, findsOneWidget);
+    final initialProgress = tester.widget<LinearProgressIndicator>(
+      progressFinder,
+    );
+    expect(initialProgress.value, greaterThan(0));
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Saisissez un titre pour la tâche'), findsNothing);
+    expect(progressFinder, findsNothing);
+  });
+
   testWidgets('démarre proprement avec une Inbox vide', (
     WidgetTester tester,
   ) async {
@@ -106,7 +130,7 @@ void main() {
       expect(find.text('Durée estimée'), findsOneWidget);
       expect(
         find.text(
-          'La durée ne peut pas dépasser 4 heures (minimum : 15 minutes).',
+          'De 15 min à 4 h. Une durée en heures peut être décimale, par exemple 1,5 h.',
         ),
         findsOneWidget,
       );
@@ -129,6 +153,67 @@ void main() {
       expect(find.text('Deadline'), findsNothing);
     },
   );
+
+  testWidgets('convertit une durée saisie en heures en minutes', (
+    WidgetTester tester,
+  ) async {
+    final repository = InMemoryPlanifyRepository();
+    await tester.pumpWidget(PlanoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    final durationField = find.byKey(const ValueKey('task-duration-input'));
+    await tester.enterText(
+      find.descendant(of: durationField, matching: find.byType(TextField)),
+      '90',
+    );
+    await tester.tap(find.text('Heures'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: durationField,
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      '1,5',
+    );
+    await tester.tap(find.text('Minutes'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: durationField,
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      '90',
+    );
+
+    await tester.tap(find.text('Heures'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: durationField, matching: find.byType(TextField)),
+      '2',
+    );
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Tâche de deux heures',
+    );
+    await tester.tap(find.text('Ajouter').last);
+    await tester.pumpAndSettle();
+
+    final savedTask = (await repository.loadTasks()).single;
+    expect(savedTask.durationMinutes, 120);
+  });
 
   testWidgets('les champs du formulaire s’adaptent au thème sombre', (
     WidgetTester tester,
@@ -297,6 +382,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -350));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Choisir une date et une heure'));
     await tester.tap(find.text('Choisir une date et une heure'));
