@@ -181,9 +181,9 @@ void _showTopNotification(
   late final OverlayEntry entry;
   entry = OverlayEntry(
     builder: (_) => Positioned(
-      top: 0,
-      left: 12,
-      right: 12,
+      top: 4,
+      left: 20,
+      right: 20,
       child: SafeArea(
         bottom: false,
         child: _TimedTopNotification(
@@ -256,13 +256,13 @@ class _TimedTopNotificationState extends State<_TimedTopNotification>
     return Material(
       color: background,
       elevation: 8,
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+            padding: const EdgeInsets.fromLTRB(12, 6, 4, 4),
             child: Row(
               children: [
                 Expanded(
@@ -284,8 +284,13 @@ class _TimedTopNotificationState extends State<_TimedTopNotification>
                 IconButton(
                   tooltip: 'Fermer',
                   onPressed: widget.onDismiss,
-                  icon: Icon(Icons.close, color: foreground, size: 18),
+                  icon: Icon(Icons.close, color: foreground, size: 16),
                   visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                 ),
               ],
             ),
@@ -294,7 +299,7 @@ class _TimedTopNotificationState extends State<_TimedTopNotification>
             animation: _progress,
             builder: (context, _) => LinearProgressIndicator(
               value: 1 - _progress.value,
-              minHeight: 3,
+              minHeight: 2,
               backgroundColor: foreground.withValues(alpha: .18),
               valueColor: AlwaysStoppedAnimation<Color>(foreground),
             ),

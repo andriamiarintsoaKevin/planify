@@ -28,7 +28,7 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
     final colorScheme = Theme.of(context).colorScheme;
     return SafeArea(
       child: Material(
-        color: Colors.transparent,
+        color: colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),

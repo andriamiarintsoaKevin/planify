@@ -50,6 +50,34 @@ class LocalReminderService {
         false;
   }
 
+  Future<bool> requestExactAlarmPermission() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return true;
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    if (await android?.canScheduleExactNotifications() ?? false) return true;
+    return await android?.requestExactAlarmsPermission() ?? false;
+  }
+
+  Future<bool?> areNotificationsEnabled() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return null;
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    return android?.areNotificationsEnabled();
+  }
+
+  Future<bool> openNotificationSettings() async {
+    if (defaultTargetPlatform != TargetPlatform.android) return false;
+    final android = _notifications
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    return await android?.openAppNotificationSettings() ?? false;
+  }
+
   Future<void> syncTask(PlanoTask task) async {
     if (!isAvailable) return;
     final id = _notificationId(task.id);
@@ -60,6 +88,16 @@ class LocalReminderService {
         start == null ||
         !start.isAfter(DateTime.now())) {
       return;
+    }
+    var exactAlarmsAllowed = true;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      exactAlarmsAllowed =
+          await _notifications
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >()
+              ?.canScheduleExactNotifications() ??
+          false;
     }
     await _notifications.zonedSchedule(
       id: id,
@@ -76,7 +114,9 @@ class LocalReminderService {
         ),
         iOS: DarwinNotificationDetails(),
       ),
-      androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+      androidScheduleMode: exactAlarmsAllowed
+          ? AndroidScheduleMode.exactAllowWhileIdle
+          : AndroidScheduleMode.inexactAllowWhileIdle,
       payload: task.id,
     );
   }

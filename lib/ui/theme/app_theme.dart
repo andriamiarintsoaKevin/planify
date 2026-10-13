@@ -64,10 +64,8 @@ extension _PlanoTheme on _PlanoAppState {
       ),
       dividerColor: outline,
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: _darkMode
-            ? const Color(0xFF292E38)
-            : const Color(0xFF252936),
-        contentTextStyle: const TextStyle(color: Colors.white),
+        backgroundColor: colorScheme.primary,
+        contentTextStyle: TextStyle(color: colorScheme.onPrimary),
         behavior: SnackBarBehavior.floating,
       ),
       bottomSheetTheme: BottomSheetThemeData(

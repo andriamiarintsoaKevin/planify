@@ -123,6 +123,23 @@ class _PlanoAppState extends State<PlanoApp> {
       } on Object catch (error) {
         if (mounted) _showMessage('Rappels non actualisés : $error');
       }
+      if (defaultTargetPlatform == TargetPlatform.android &&
+          _tasks.any(
+            (task) =>
+                task.reminderEnabled &&
+                task.status == TaskStatus.scheduled &&
+                task.scheduledStart?.isAfter(DateTime.now()) == true,
+          ) &&
+          await _reminderService.areNotificationsEnabled() == false &&
+          mounted) {
+        _showMessage(
+          'Les notifications Android sont désactivées. Autorisez-les pour recevoir vos rappels.',
+          actionLabel: 'Réglages',
+          onAction: () async {
+            await _reminderService.openNotificationSettings();
+          },
+        );
+      }
     } on Object catch (error) {
       if (!mounted) return;
       setState(() {
@@ -282,6 +299,7 @@ class _PlanoAppState extends State<PlanoApp> {
     }
     final updated = result.task!;
     String? reminderPermissionIssue;
+    var notificationsDisabled = false;
     if (updated.reminderEnabled &&
         !(task?.reminderEnabled ?? false) &&
         _reminderService.isAvailable) {
@@ -290,6 +308,13 @@ class _PlanoAppState extends State<PlanoApp> {
         if (!permissionGranted) {
           reminderPermissionIssue =
               'les notifications sont désactivées sur cet appareil';
+          notificationsDisabled = true;
+        } else if (updated.status == TaskStatus.scheduled &&
+            updated.scheduledStart?.isAfter(DateTime.now()) == true &&
+            defaultTargetPlatform == TargetPlatform.android &&
+            !await _reminderService.requestExactAlarmPermission()) {
+          reminderPermissionIssue =
+              'l’alarme exacte est refusée : le rappel pourra être retardé par Android';
         }
       } on Object catch (error) {
         reminderPermissionIssue =
@@ -318,6 +343,12 @@ class _PlanoAppState extends State<PlanoApp> {
       reminderPermissionIssue == null
           ? savedMessage
           : '$savedMessage, mais $reminderPermissionIssue',
+      actionLabel: notificationsDisabled ? 'Réglages' : null,
+      onAction: notificationsDisabled
+          ? () async {
+              await _reminderService.openNotificationSettings();
+            }
+          : null,
     );
   }
 
@@ -697,8 +728,17 @@ class _PlanoAppState extends State<PlanoApp> {
     );
   }
 
-  void _showMessage(String message) {
-    _showTopNotification(_appContext!, message);
+  void _showMessage(
+    String message, {
+    String? actionLabel,
+    VoidCallback? onAction,
+  }) {
+    _showTopNotification(
+      _appContext!,
+      message,
+      actionLabel: actionLabel,
+      onAction: onAction,
+    );
   }
 
   bool _isTaskPast(PlanoTask task) => isTaskPast(task, DateTime.now());

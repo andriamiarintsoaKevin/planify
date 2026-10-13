@@ -36,7 +36,12 @@ AVANT DE COMMENCER
 3. Choisir une durée entre 15 minutes et 4 heures, puis « Planifier le » et
    sélectionner une date et une heure.
 4. Ajouter un projet facultatif, une priorité et des notes. Tester le rappel si
-   l’autorisation système est accordée.
+   l’autorisation système est accordée. Sur Android, choisir une heure future
+   dans quelques minutes, activer le rappel et enregistrer. Autoriser les
+   notifications et l’alarme exacte si Android le demande, puis vérifier que
+   le rappel arrive à l’heure prévue, même après avoir fermé l’application.
+   Si les notifications sont refusées, vérifier que l’action « Réglages »
+   ouvre les paramètres de notification de Planify.
 5. Enregistrer et vérifier que l’échéance est calculée depuis le début et la
    durée, sans champ Deadline dans le formulaire.
 6. Rouvrir la fiche, appuyer sur « Modifier la tâche », choisir « Supprimer »

@@ -124,8 +124,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   @override
   Widget build(BuildContext context) {
     final editing = widget.task != null;
-    final canLockSchedule =
-        _scheduledStart != null;
+    final canLockSchedule = _scheduledStart != null;
     return DraggableScrollableSheet(
       initialChildSize: .88,
       minChildSize: .65,
@@ -284,9 +283,11 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
               child: SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: const Text('Verrouiller l’horaire'),
-                subtitle: Text(canLockSchedule
-                    ? 'Le planificateur ne déplacera pas cette tâche'
-                    : 'Choisissez d’abord une date et une heure'),
+                subtitle: Text(
+                  canLockSchedule
+                      ? 'Le planificateur ne déplacera pas cette tâche'
+                      : 'Choisissez d’abord une date et une heure',
+                ),
                 value: _locked,
                 activeThumbColor: _primary,
                 onChanged: canLockSchedule
@@ -301,8 +302,10 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.notifications_active_outlined),
                   title: const Text('Me rappeler cette tâche'),
-                  subtitle: const Text(
-                    'Notification à l’heure de début planifiée',
+                  subtitle: Text(
+                    _scheduledStart == null
+                        ? 'Le rappel sera programmé après avoir choisi une date et une heure'
+                        : 'Notification à ${_clock(_scheduledStart!)}',
                   ),
                   value: _reminderEnabled,
                   activeThumbColor: _primary,
@@ -344,7 +347,9 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
 
   Future<void> _chooseSchedule() async {
     if (_duration < 15 || _duration > 240) {
-      _showFormMessage('La durée doit être comprise entre 15 minutes et 4 heures');
+      _showFormMessage(
+        'La durée doit être comprise entre 15 minutes et 4 heures',
+      );
       return;
     }
     final now = DateTime.now();
@@ -394,7 +399,9 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     }
     final old = widget.task;
     if (_duration < 15 || _duration > 240) {
-      _showFormMessage('La durée doit être comprise entre 15 minutes et 4 heures');
+      _showFormMessage(
+        'La durée doit être comprise entre 15 minutes et 4 heures',
+      );
       return;
     }
     final scheduledEnd = _scheduledStart?.add(Duration(minutes: _duration));
