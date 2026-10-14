@@ -79,6 +79,48 @@ flutter test
 flutter analyze
 ```
 
+## Compatibilité et distribution Android
+
+Planify est compatible avec Android 7.0 (API 24) et les versions ultérieures.
+Cette limite vient des plugins de rappels et de calendrier utilisés par
+l’application ; les versions antérieures ne peuvent donc pas être prises en
+charge sans retirer ces fonctions. L’identifiant Android actuel est
+`com.example.planify` : il n’est pas lié à l’appareil de test, mais doit être
+remplacé par un identifiant unique avant une publication publique.
+
+`flutter run` installe une version de développement ; pour transmettre une
+version plus légère, générez un APK de production distinct pour chaque
+architecture :
+
+```sh
+flutter build apk --release --split-per-abi
+```
+
+Les fichiers sont créés dans `build/app/outputs/flutter-apk/`. Transmettez
+celui qui correspond au processeur de l’appareil :
+
+- `app-arm64-v8a-release.apk` pour la plupart des téléphones récents ;
+- `app-armeabi-v7a-release.apk` pour les appareils Android 32 bits ;
+- `app-x86_64-release.apk` pour les appareils x86_64, notamment certains
+  émulateurs.
+
+Pour une distribution par Google Play, générez plutôt un bundle :
+
+```sh
+flutter build appbundle --release
+```
+
+La configuration Gradle actuelle signe encore les versions `release` avec la
+clé de débogage : ces APK conviennent aux essais et au transfert direct, mais
+pas à une publication sur Google Play ni à des mises à jour de production.
+Avant publication, configurez une clé de signature privée et conservez-la
+durablement ; les mises à jour doivent garder la même clé et le même
+identifiant d’application.
+
+Enfin, le transfert de l’APK ne transfère pas les tâches ni les réglages :
+ceux-ci sont enregistrés dans une base SQLite sur chaque appareil. Planify
+n’inclut actuellement ni export/import ni synchronisation entre appareils.
+
 ## Intégrations non incluses
 
 La connexion calendrier lit les calendriers fournis par le système mobile et
