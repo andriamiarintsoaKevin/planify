@@ -61,6 +61,11 @@ void main() {
         title: 'Préparer le test Planify',
         durationMinutes: 30,
       ),
+      const PlanoTask(
+        id: 'plan-too-long',
+        title: 'Tâche trop longue',
+        durationMinutes: 25 * 60,
+      ),
     ]);
     await tester.pumpWidget(PlanoApp(repository: repository));
     await tester.pumpAndSettle();
@@ -81,8 +86,9 @@ void main() {
 
     expect(find.text('Préparer le test Planify'), findsOneWidget);
 
-    await tester.ensureVisible(find.text('Planifier automatiquement la tâche'));
-    await tester.tap(find.text('Planifier automatiquement la tâche'));
+    const planButtonLabel = 'Planifier automatiquement les 2 tâches';
+    await tester.ensureVisible(find.text(planButtonLabel));
+    await tester.tap(find.text(planButtonLabel));
     await tester.pumpAndSettle();
 
     expect(find.text('Préparer le plan'), findsOneWidget);
@@ -97,7 +103,11 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Plan proposé'), findsOneWidget);
-    expect(find.text('Tout est dans les temps'), findsOneWidget);
+    expect(find.text('Tâche trop longue'), findsOneWidget);
+    expect(
+      find.text('Durée supérieure au temps libre disponible.'),
+      findsOneWidget,
+    );
     await tester.drag(find.byType(ListView).last, const Offset(0, -700));
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Modifier'));
@@ -115,6 +125,21 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Votre planning'), findsOneWidget);
+    expect(find.text('Annuler'), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+
+    final restoredTasks = await repository.loadTasks();
+    final restoredTask = restoredTasks.singleWhere(
+      (task) => task.id == 'plan-preview',
+    );
+    final stillUnplaced = restoredTasks.singleWhere(
+      (task) => task.id == 'plan-too-long',
+    );
+    expect(restoredTask.status, TaskStatus.inbox);
+    expect(restoredTask.scheduledStart, isNull);
+    expect(restoredTask.plannedEnd, isNull);
+    expect(stillUnplaced.status, TaskStatus.inbox);
   });
 
   testWidgets(

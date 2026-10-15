@@ -55,7 +55,14 @@ void main() {
   test('ne planifie aucune tâche avant le début futur de la journée', () {
     final start = at(16);
     final result = generatePlan(
-      tasks: const [PlanoTask(id: 'future', title: 'Tâche future')],
+      tasks: const [
+        PlanoTask(id: 'future', title: 'Tâche future'),
+        PlanoTask(
+          id: 'future-2',
+          title: 'Autre tâche future',
+          durationMinutes: 45,
+        ),
+      ],
       fixedEvents: [],
       settings: PlanSettings(
         dayStart: start,
@@ -63,7 +70,11 @@ void main() {
       ),
     );
 
-    expect(result.placements.single.start.isBefore(start), isFalse);
+    expect(result.placements, hasLength(2));
+    expect(
+      result.placements.every((placement) => !placement.start.isBefore(start)),
+      isTrue,
+    );
     expect(result.placements.single.start, start);
   });
 
@@ -120,6 +131,10 @@ void main() {
       );
 
       expect(result.unplaced.map((task) => task.id), contains('late'));
+      expect(
+        result.unplacedReasons['late'],
+        'La deadline ne laisse pas assez de temps libre.',
+      );
       final estimated = result.placements.single;
       expect(estimated.task.id, 'estimated');
       expect(estimated.end.difference(estimated.start).inMinutes, 30);
@@ -152,6 +167,48 @@ void main() {
     expect(result.placements.single.task.id, 'new');
     expect(result.placements.single.start, at(1));
     expect(result.unplaced, isEmpty);
+    expect(locked.scheduledStart, at(0));
+    expect(locked.plannedEnd, at(1));
+    expect(locked.isLocked, isTrue);
+  });
+
+  test('explique les tâches plus longues que toute la journée', () {
+    const tooLong = PlanoTask(
+      id: 'too-long',
+      title: 'Tâche trop longue',
+      durationMinutes: 24 * 60 + 1,
+    );
+    final result = generatePlan(
+      tasks: [tooLong],
+      fixedEvents: [],
+      settings: settings(),
+    );
+
+    expect(result.unplaced, [tooLong]);
+    expect(
+      result.unplacedReasons,
+      {'too-long': 'Durée supérieure au temps libre disponible.'},
+    );
+  });
+
+  test('explique une journée sans aucune disponibilité', () {
+    final result = generatePlan(
+      tasks: const [PlanoTask(id: 'busy-day', title: 'Tâche sans créneau')],
+      fixedEvents: [
+        FixedEvent(
+          title: 'Journée occupée',
+          start: day,
+          end: DateTime(day.year, day.month, day.day + 1),
+        ),
+      ],
+      settings: settings(),
+    );
+
+    expect(result.placements, isEmpty);
+    expect(
+      result.unplacedReasons['busy-day'],
+      'Aucun créneau disponible dans cette journée.',
+    );
   });
 
   test('ne planifie pas après la fin de la journée', () {
@@ -239,6 +296,72 @@ void main() {
     );
 
     expect(result.placements.single.start, at(12, 10));
+  });
+
+  test('la marge et la pause déjeuner ne s’appliquent que si activées', () {
+    final locked = PlanoTask(
+      id: 'locked-until-noon',
+      title: 'Tâche fixe',
+      durationMinutes: 12 * 60,
+      status: TaskStatus.scheduled,
+      scheduledStart: at(0),
+      plannedEnd: at(12),
+      isLocked: true,
+    );
+    const next = PlanoTask(
+      id: 'next',
+      title: 'Tâche suivante',
+      durationMinutes: 30,
+    );
+
+    final withoutOptions = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(),
+    );
+    final withLunch = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(lunch: true),
+    );
+    final withBuffer = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(bufferMinutes: 10),
+    );
+
+    expect(withoutOptions.placements.single.start, at(12));
+    expect(withLunch.placements.single.start, at(13, 30));
+    expect(withBuffer.placements.single.start, at(12, 10));
+  });
+
+  test('les placements générés ne se chevauchent pas', () {
+    final result = generatePlan(
+      tasks: [
+        const PlanoTask(id: 'a', title: 'A', durationMinutes: 75),
+        const PlanoTask(id: 'b', title: 'B', durationMinutes: 45),
+        const PlanoTask(id: 'c', title: 'C', durationMinutes: 60),
+      ],
+      fixedEvents: [
+        FixedEvent(title: 'Événement', start: at(10), end: at(11)),
+      ],
+      settings: settings(),
+    );
+
+    for (var i = 0; i < result.placements.length; i++) {
+      final current = result.placements[i];
+      expect(
+        current.start.isBefore(at(10)) || !current.start.isBefore(at(11)),
+        isTrue,
+      );
+      for (final other in result.placements.skip(i + 1)) {
+        expect(
+          current.end.isAfter(other.start) &&
+              other.end.isAfter(current.start),
+          isFalse,
+        );
+      }
+    }
   });
 
   test(
