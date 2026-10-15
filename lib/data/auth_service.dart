@@ -66,7 +66,23 @@ class AuthService {
         'Le mot de passe ne respecte pas les critères de sécurité.',
       'email_address_invalid' || 'validation_failed' =>
         'Vérifiez l’adresse e-mail et le mot de passe saisis.',
-      _ => 'L’$action a échoué. Vérifiez vos informations et réessayez.',
+      'signup_disabled' || 'email_provider_disabled' =>
+        'Les inscriptions par e-mail sont désactivées dans le projet Supabase.',
+      'email_exists' || 'user_already_exists' =>
+        'Cette adresse est peut-être déjà inscrite. Essayez de vous connecter.',
+      'over_email_send_rate_limit' || 'over_request_rate_limit' =>
+        'Trop de tentatives. Attendez un peu avant de réessayer.',
+      _ => _diagnosticMessage(error, action: action),
     };
+  }
+
+  String _diagnosticMessage(AuthException error, {required String action}) {
+    final details = [
+      if (error.code != null) 'code ${error.code}',
+      if (error.statusCode != null) 'HTTP ${error.statusCode}',
+    ];
+    final suffix = details.isEmpty ? '' : ' (${details.join(', ')})';
+    return 'L’$action a échoué$suffix. Vérifiez le fournisseur e-mail et les '
+        'journaux Auth du projet Supabase.';
   }
 }

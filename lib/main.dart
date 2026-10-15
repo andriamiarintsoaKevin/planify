@@ -207,93 +207,178 @@ class _PlanoAppState extends State<PlanoApp> {
     final emailController = TextEditingController();
     final passwordController = TextEditingController();
     var busy = false;
+    var creatingAccount = false;
+    var obscurePassword = true;
     String? errorMessage;
     await showDialog<void>(
       context: _appContext!,
       builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Connexion facultative'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
+        builder: (context, setDialogState) {
+          Future<void> submit() async {
+            setDialogState(() {
+              busy = true;
+              errorMessage = null;
+            });
+            try {
+              if (creatingAccount) {
+                await authRepository.signUp(
+                  email: emailController.text,
+                  password: passwordController.text,
+                );
+              } else {
+                await authRepository.signIn(
+                  email: emailController.text,
+                  password: passwordController.text,
+                );
+              }
+              if (context.mounted) Navigator.pop(context);
+              if (creatingAccount) {
+                _showMessage(
+                  'Compte créé. Confirmez votre e-mail si demandé.',
+                );
+              }
+            } on Object catch (error) {
+              setDialogState(() => errorMessage = '$error');
+            } finally {
+              if (context.mounted) {
+                setDialogState(() => busy = false);
+              }
+            }
+          }
+
+          Widget authField({
+            required String label,
+            required String hint,
+            required TextEditingController controller,
+            required TextInputType keyboardType,
+            required Iterable<String> autofillHints,
+            bool obscureText = false,
+            Widget? suffixIcon,
+            TextInputAction? textInputAction,
+          }) => Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _FieldLabel(label),
+              const SizedBox(height: 6),
               TextField(
-                controller: emailController,
-                keyboardType: TextInputType.emailAddress,
+                controller: controller,
+                keyboardType: keyboardType,
                 autocorrect: false,
-                decoration: const InputDecoration(labelText: 'Adresse e-mail'),
+                enableSuggestions: !obscureText,
+                obscureText: obscureText,
+                autofillHints: autofillHints,
+                textInputAction: textInputAction,
+                decoration: InputDecoration(
+                  hintText: hint,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 15,
+                  ),
+                  suffixIcon: suffixIcon,
+                ),
               ),
-              TextField(
-                controller: passwordController,
-                obscureText: true,
-                decoration: const InputDecoration(labelText: 'Mot de passe'),
-              ),
-              if (errorMessage != null) ...[
-                const SizedBox(height: 8),
+            ],
+          );
+
+          return AlertDialog(
+            scrollable: true,
+            title: Text(creatingAccount ? 'Créer un compte' : 'Se connecter'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
                 Text(
-                  errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  'La synchronisation de vos tâches est facultative.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 18),
+                authField(
+                  label: 'Adresse e-mail',
+                  hint: 'nom@exemple.com',
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autofillHints: const [AutofillHints.email],
+                  textInputAction: TextInputAction.next,
+                ),
+                const SizedBox(height: 14),
+                authField(
+                  label: 'Mot de passe',
+                  hint: 'Votre mot de passe',
+                  controller: passwordController,
+                  keyboardType: TextInputType.visiblePassword,
+                  autofillHints: [
+                    creatingAccount
+                        ? AutofillHints.newPassword
+                        : AutofillHints.password,
+                  ],
+                  obscureText: obscurePassword,
+                  textInputAction: TextInputAction.done,
+                  suffixIcon: IconButton(
+                    tooltip: obscurePassword
+                        ? 'Afficher le mot de passe'
+                        : 'Masquer le mot de passe',
+                    onPressed: () => setDialogState(
+                      () => obscurePassword = !obscurePassword,
+                    ),
+                    icon: Icon(
+                      obscurePassword
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                  ),
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 14),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.errorContainer,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      errorMessage!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.onErrorContainer,
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: busy
+                      ? null
+                      : () => setDialogState(() {
+                          creatingAccount = !creatingAccount;
+                          errorMessage = null;
+                        }),
+                  child: Text(
+                    creatingAccount
+                        ? 'Déjà un compte ? Se connecter'
+                        : 'Pas encore de compte ? Créer un compte',
+                  ),
                 ),
               ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: busy ? null : () => Navigator.pop(context),
+                child: const Text('Plus tard'),
+              ),
+              FilledButton(
+                onPressed: busy ? null : submit,
+                child: busy
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(creatingAccount ? 'Créer le compte' : 'Connexion'),
+              ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: busy ? null : () => Navigator.pop(context),
-              child: const Text('Plus tard'),
-            ),
-            TextButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setDialogState(() {
-                        busy = true;
-                        errorMessage = null;
-                      });
-                      try {
-                        await authRepository.signUp(
-                          email: emailController.text,
-                          password: passwordController.text,
-                        );
-                        if (context.mounted) Navigator.pop(context);
-                        _showMessage(
-                          'Compte créé. Confirmez votre e-mail si demandé.',
-                        );
-                      } on Object catch (error) {
-                        setDialogState(() => errorMessage = '$error');
-                      } finally {
-                        if (context.mounted) {
-                          setDialogState(() => busy = false);
-                        }
-                      }
-                    },
-              child: const Text('Créer un compte'),
-            ),
-            FilledButton(
-              onPressed: busy
-                  ? null
-                  : () async {
-                      setDialogState(() {
-                        busy = true;
-                        errorMessage = null;
-                      });
-                      try {
-                        await authRepository.signIn(
-                          email: emailController.text,
-                          password: passwordController.text,
-                        );
-                        if (context.mounted) Navigator.pop(context);
-                      } on Object catch (error) {
-                        setDialogState(() => errorMessage = '$error');
-                      } finally {
-                        if (context.mounted) {
-                          setDialogState(() => busy = false);
-                        }
-                      }
-                    },
-              child: const Text('Connexion'),
-            ),
-          ],
-        ),
+          );
+        },
       ),
     );
     emailController.dispose();
