@@ -3,14 +3,19 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/config/app_config.dart';
+import 'data/auth_repository.dart';
 import 'data/database_initializer.dart';
 import 'data/device_calendar_service.dart';
 import 'data/local_reminder_service.dart';
 import 'data/plano_repository.dart';
 import 'data/sqlite_planify_repository.dart';
+import 'data/supabase_task_sync_remote.dart';
 import 'data/task_id.dart';
 import 'data/task_repository.dart';
+import 'data/task_sync_service.dart';
 import 'domain/planner.dart';
 
 import 'package:device_calendar_plus/device_calendar_plus.dart' show Calendar;
@@ -30,6 +35,13 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializePlanifyDatabase();
   await LocalReminderService().initialize();
+  if (AppConfig.isConfigured) {
+    await Supabase.initialize(
+      url: AppConfig.supabaseUrl,
+      publishableKey: AppConfig.supabaseAnonKey,
+      authOptions: const FlutterAuthClientOptions(persistSession: true),
+    );
+  }
   runApp(const PlanoApp());
 }
 
@@ -75,11 +87,30 @@ class _PlanoAppState extends State<PlanoApp> {
   BuildContext? _appContext;
   bool _isLoading = true;
   Object? _loadError;
+  AuthRepository? _authRepository;
+  TaskSyncService? _taskSyncService;
+  SyncStatus _syncStatus = SyncStatus.offline;
+  int _seenRemoteChangesVersion = 0;
   late final Timer _clockRefreshTimer;
 
   @override
   void initState() {
     super.initState();
+    if (AppConfig.isConfigured) {
+      final client = Supabase.instance.client;
+      _authRepository = SupabaseAuthRepository(client);
+      final taskRepository = _taskRepository;
+      if (taskRepository is SyncTaskRepository) {
+        final service = TaskSyncService(
+          repository: taskRepository,
+          remote: SupabaseTaskSyncRemote(client),
+          network: ConnectivitySyncNetworkMonitor(),
+          authRepository: _authRepository!,
+        );
+        _taskSyncService = service..addListener(_onSyncStatusChanged);
+        unawaited(service.start());
+      }
+    }
     _clockRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       if (mounted) setState(() {});
     });
@@ -89,7 +120,184 @@ class _PlanoAppState extends State<PlanoApp> {
   @override
   void dispose() {
     _clockRefreshTimer.cancel();
+    _taskSyncService?.removeListener(_onSyncStatusChanged);
+    _taskSyncService?.dispose();
     super.dispose();
+  }
+
+  void _onSyncStatusChanged() {
+    final service = _taskSyncService!;
+    if (mounted) setState(() => _syncStatus = service.status);
+    if (service.remoteChangesVersion > _seenRemoteChangesVersion) {
+      _seenRemoteChangesVersion = service.remoteChangesVersion;
+      unawaited(_reloadTasksAfterSync());
+    }
+  }
+
+  Future<void> _reloadTasksAfterSync() async {
+    late final List<PlanoTask> tasks;
+    try {
+      tasks = await _taskRepository.loadTasks();
+    } on Object catch (error) {
+      if (mounted) _showMessage('Impossible d’actualiser les tâches : $error');
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _tasks
+        ..clear()
+        ..addAll(tasks);
+    });
+    try {
+      await _syncAllReminders();
+    } on Object catch (error) {
+      if (mounted) {
+        _showMessage(
+          'Tâches synchronisées, mais rappels non actualisés : $error',
+        );
+      }
+    }
+  }
+
+  Future<void> _requestSync() async {
+    final service = _taskSyncService;
+    if (service == null) return;
+    await service.syncNow();
+  }
+
+  Future<void> _retrySync() async {
+    final service = _taskSyncService;
+    if (service == null) return;
+    await service.retryFailedOperations();
+  }
+
+  Future<void> _showAccountDialog() async {
+    final authRepository = _authRepository;
+    if (authRepository == null) {
+      _showMessage('Connexion non configurée : les données restent locales.');
+      return;
+    }
+    if (authRepository.currentUser != null) {
+      final shouldSignOut = await showDialog<bool>(
+        context: _appContext!,
+        builder: (context) => AlertDialog(
+          title: const Text('Compte connecté'),
+          content: Text(authRepository.currentUser?.email ?? ''),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Annuler'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Déconnexion'),
+            ),
+          ],
+        ),
+      );
+      if (shouldSignOut != true) return;
+      try {
+        await authRepository.signOut();
+      } on Object catch (error) {
+        _showMessage('Déconnexion impossible : $error');
+      }
+      return;
+    }
+
+    final emailController = TextEditingController();
+    final passwordController = TextEditingController();
+    var busy = false;
+    String? errorMessage;
+    await showDialog<void>(
+      context: _appContext!,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Connexion facultative'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: emailController,
+                keyboardType: TextInputType.emailAddress,
+                autocorrect: false,
+                decoration: const InputDecoration(labelText: 'Adresse e-mail'),
+              ),
+              TextField(
+                controller: passwordController,
+                obscureText: true,
+                decoration: const InputDecoration(labelText: 'Mot de passe'),
+              ),
+              if (errorMessage != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: busy ? null : () => Navigator.pop(context),
+              child: const Text('Plus tard'),
+            ),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        busy = true;
+                        errorMessage = null;
+                      });
+                      try {
+                        await authRepository.signUp(
+                          email: emailController.text,
+                          password: passwordController.text,
+                        );
+                        if (context.mounted) Navigator.pop(context);
+                        _showMessage(
+                          'Compte créé. Confirmez votre e-mail si demandé.',
+                        );
+                      } on Object catch (error) {
+                        setDialogState(() => errorMessage = '$error');
+                      } finally {
+                        if (context.mounted) {
+                          setDialogState(() => busy = false);
+                        }
+                      }
+                    },
+              child: const Text('Créer un compte'),
+            ),
+            FilledButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setDialogState(() {
+                        busy = true;
+                        errorMessage = null;
+                      });
+                      try {
+                        await authRepository.signIn(
+                          email: emailController.text,
+                          password: passwordController.text,
+                        );
+                        if (context.mounted) Navigator.pop(context);
+                      } on Object catch (error) {
+                        setDialogState(() => errorMessage = '$error');
+                      } finally {
+                        if (context.mounted) {
+                          setDialogState(() => busy = false);
+                        }
+                      }
+                    },
+              child: const Text('Connexion'),
+            ),
+          ],
+        ),
+      ),
+    );
+    emailController.dispose();
+    passwordController.dispose();
   }
 
   Future<void> _loadInitialData() async {
@@ -544,6 +752,7 @@ class _PlanoAppState extends State<PlanoApp> {
     }
     try {
       await _taskRepository.softDeleteTask(task.id);
+      unawaited(_requestSync());
     } on Object catch (error) {
       _showMessage('Impossible de supprimer la tâche : $error');
       return;
@@ -578,6 +787,7 @@ class _PlanoAppState extends State<PlanoApp> {
   Future<bool> _persistTasks() async {
     try {
       await _taskRepository.saveTasks(List.unmodifiable(_tasks));
+      unawaited(_requestSync());
       try {
         await _syncAllReminders();
       } on Object catch (error) {

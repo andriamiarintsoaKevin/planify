@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:sqflite/sqflite.dart';
 
 import '../domain/planner.dart';
@@ -6,7 +8,24 @@ import 'plano_repository.dart';
 import 'task_id.dart';
 import 'task_repository.dart';
 
-class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
+class SqlitePlanifyRepository implements PlanoRepository, SyncTaskRepository {
+  static const _taskContentColumns = [
+    'title',
+    'notes',
+    'duration_minutes',
+    'priority',
+    'due_date',
+    'status',
+    'scheduled_start',
+    'planned_end',
+    'project',
+    'is_locked',
+    'is_ai_proposed',
+    'is_duration_estimated',
+    'reminder_enabled',
+    'deleted_at',
+  ];
+
   SqlitePlanifyRepository({this.databasePath});
 
   final String? databasePath;
@@ -29,52 +48,43 @@ class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
     await database.transaction((transaction) async {
       final now = DateTime.now().toUtc().toIso8601String();
       for (final task in tasks) {
-        final row = _taskToRow(task, now);
-        await transaction.rawInsert(
-          '''
-          INSERT INTO tasks (
-            id, title, notes, duration_minutes, priority, due_date, status,
-            scheduled_start, planned_end, project, is_locked, is_ai_proposed,
-            is_duration_estimated, reminder_enabled, created_at, updated_at,
-            deleted_at
-          ) VALUES (
-            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
-          )
-          ON CONFLICT(id) DO UPDATE SET
-            title = excluded.title,
-            notes = excluded.notes,
-            duration_minutes = excluded.duration_minutes,
-            priority = excluded.priority,
-            due_date = excluded.due_date,
-            status = excluded.status,
-            scheduled_start = excluded.scheduled_start,
-            planned_end = excluded.planned_end,
-            project = excluded.project,
-            is_locked = excluded.is_locked,
-            is_ai_proposed = excluded.is_ai_proposed,
-            is_duration_estimated = excluded.is_duration_estimated,
-            reminder_enabled = excluded.reminder_enabled,
-            updated_at = excluded.updated_at
-        ''',
-          [
-            row['id'],
-            row['title'],
-            row['notes'],
-            row['duration_minutes'],
-            row['priority'],
-            row['due_date'],
-            row['status'],
-            row['scheduled_start'],
-            row['planned_end'],
-            row['project'],
-            row['is_locked'],
-            row['is_ai_proposed'],
-            row['is_duration_estimated'],
-            row['reminder_enabled'],
-            row['created_at'],
-            row['updated_at'],
-            row['deleted_at'],
-          ],
+        final existingRows = await transaction.query(
+          'tasks',
+          where: 'id = ?',
+          whereArgs: [task.id],
+          limit: 1,
+        );
+        final existing = existingRows.isEmpty ? null : existingRows.single;
+        if (existing?['deleted_at'] != null) continue;
+        final createdAt =
+            existing?['created_at'] as String? ??
+            task.createdAt?.toUtc().toIso8601String() ??
+            now;
+        final row = _taskToRow(
+          task.copyWith(createdAt: DateTime.parse(createdAt)),
+          now,
+        );
+        final hasChanged =
+            existing == null ||
+            _taskContentColumns.any(
+              (column) => existing[column] != row[column],
+            );
+        if (!hasChanged) continue;
+        await transaction.insert(
+          'tasks',
+          row,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        await _enqueue(
+          transaction,
+          task.copyWith(
+            createdAt: DateTime.parse(createdAt),
+            updatedAt: DateTime.parse(now),
+            deletedAt: null,
+          ),
+          existing == null
+              ? SyncOperationType.create
+              : SyncOperationType.update,
         );
       }
     });
@@ -82,13 +92,177 @@ class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
 
   @override
   Future<void> softDeleteTask(String id) async {
-    final now = DateTime.now().toUtc().toIso8601String();
-    await (await _db).update(
-      'tasks',
-      {'deleted_at': now, 'updated_at': now},
-      where: 'id = ? AND deleted_at IS NULL',
-      whereArgs: [id],
+    final database = await _db;
+    await database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'tasks',
+        where: 'id = ? AND deleted_at IS NULL',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final now = DateTime.now().toUtc();
+      final nowIso = now.toIso8601String();
+      await transaction.update(
+        'tasks',
+        {'deleted_at': nowIso, 'updated_at': nowIso},
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+      final deleted = _taskFromRow({
+        ...rows.single,
+        'deleted_at': nowIso,
+        'updated_at': nowIso,
+      });
+      await _enqueue(transaction, deleted, SyncOperationType.delete);
+    });
+  }
+
+  @override
+  Future<List<SyncQueueOperation>> loadSyncQueue() async {
+    final rows = await (await _db).query(
+      'sync_queue',
+      where: 'state = ?',
+      whereArgs: ['pending'],
+      orderBy: 'id ASC',
     );
+    return [
+      for (final row in rows)
+        SyncQueueOperation(
+          id: row['id']! as int,
+          entity: row['entity']! as String,
+          entityId: row['entity_id']! as String,
+          type: SyncOperationType.values.byName(row['type']! as String),
+          payload: Map<String, Object?>.from(
+            jsonDecode(row['payload']! as String) as Map,
+          ),
+          attempts: row['attempts']! as int,
+          nextAttemptAt: _dateTimeFromStorage(
+            row['next_attempt_at'] as String?,
+          ),
+        ),
+    ];
+  }
+
+  @override
+  Future<int> countPendingSyncOperations() async =>
+      Sqflite.firstIntValue(
+        await (await _db).rawQuery(
+          "SELECT COUNT(*) FROM sync_queue WHERE state = 'pending'",
+        ),
+      ) ??
+      0;
+
+  @override
+  Future<int> countFailedSyncOperations() async =>
+      Sqflite.firstIntValue(
+        await (await _db).rawQuery(
+          "SELECT COUNT(*) FROM sync_queue WHERE state = 'error'",
+        ),
+      ) ??
+      0;
+
+  @override
+  Future<void> completeSyncOperation(int id) async {
+    await (await _db).delete('sync_queue', where: 'id = ?', whereArgs: [id]);
+  }
+
+  @override
+  Future<void> failSyncOperation(
+    int id, {
+    required String error,
+    required int maxAttempts,
+    required DateTime retryAt,
+  }) async {
+    final database = await _db;
+    await database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'sync_queue',
+        columns: ['attempts'],
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final attempts = (rows.single['attempts']! as int) + 1;
+      await transaction.update(
+        'sync_queue',
+        {
+          'attempts': attempts,
+          'last_error': error,
+          'state': attempts >= maxAttempts ? 'error' : 'pending',
+          'next_attempt_at': retryAt.toUtc().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [id],
+      );
+    });
+  }
+
+  @override
+  Future<void> retryFailedSyncOperations() async {
+    await (await _db).update('sync_queue', {
+      'attempts': 0,
+      'last_error': null,
+      'state': 'pending',
+      'next_attempt_at': null,
+    }, where: "state = 'error'");
+  }
+
+  @override
+  Future<DateTime?> loadSyncCursor() async {
+    final rows = await (await _db).query(
+      'sync_metadata',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['task_sync_cursor'],
+      limit: 1,
+    );
+    return rows.isEmpty
+        ? null
+        : _dateTimeFromStorage(rows.single['value'] as String?);
+  }
+
+  @override
+  Future<void> saveSyncCursor(DateTime cursor) async {
+    await (await _db).insert('sync_metadata', {
+      'key': 'task_sync_cursor',
+      'value': cursor.toUtc().toIso8601String(),
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  @override
+  Future<RemoteMergeResult> mergeRemoteTask(PlanoTask remoteTask) async {
+    final database = await _db;
+    return database.transaction((transaction) async {
+      final rows = await transaction.query(
+        'tasks',
+        where: 'id = ?',
+        whereArgs: [remoteTask.id],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final localTask = _taskFromRow(rows.single);
+        final localDeleted = localTask.deletedAt != null;
+        final remoteDeleted = remoteTask.deletedAt != null;
+        if ((localDeleted && !remoteDeleted) ||
+            (localDeleted == remoteDeleted &&
+                !_isRemoteNewer(remoteTask, localTask))) {
+          return RemoteMergeResult.localKept;
+        }
+      }
+      await transaction.insert(
+        'tasks',
+        _taskToRemoteRow(remoteTask),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      await transaction.delete(
+        'sync_queue',
+        where: 'entity = ? AND entity_id = ?',
+        whereArgs: ['task', remoteTask.id],
+      );
+      return RemoteMergeResult.remoteApplied;
+    });
   }
 
   @override
@@ -171,7 +345,7 @@ class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
     final location = databasePath ?? await getPlanifyDatabasePath();
     return openDatabase(
       location,
-      version: 5,
+      version: 6,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE tasks (
@@ -206,6 +380,7 @@ class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
             calendar_id TEXT NOT NULL
           )
         ''');
+        await _createSyncTables(database);
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -253,8 +428,116 @@ class SqlitePlanifyRepository implements PlanoRepository, TaskRepository {
           );
           await database.execute('UPDATE tasks SET due_date = deadline');
         }
+        if (oldVersion < 6) {
+          await _createSyncTables(database);
+          final now = DateTime.now().toUtc().toIso8601String();
+          final rows = await database.query('tasks');
+          for (final row in rows) {
+            final task = _taskFromRow(row);
+            await database.insert('sync_queue', {
+              'entity': 'task',
+              'entity_id': task.id,
+              'type': task.deletedAt == null ? 'create' : 'delete',
+              'payload': jsonEncode(_taskToSyncPayload(task)),
+              'attempts': 0,
+              'state': 'pending',
+              'created_at': now,
+            });
+          }
+        }
       },
     );
+  }
+
+  Future<void> _createSyncTables(DatabaseExecutor database) async {
+    await database.execute('''
+      CREATE TABLE sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity TEXT NOT NULL,
+        entity_id TEXT NOT NULL,
+        type TEXT NOT NULL CHECK (type IN ('create', 'update', 'delete')),
+        payload TEXT NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        last_error TEXT,
+        state TEXT NOT NULL DEFAULT 'pending'
+          CHECK (state IN ('pending', 'error')),
+        created_at TEXT NOT NULL,
+        next_attempt_at TEXT
+      )
+    ''');
+    await database.execute('''
+      CREATE INDEX sync_queue_state_id_idx ON sync_queue (state, id)
+    ''');
+    await database.execute('''
+      CREATE TABLE sync_metadata (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _enqueue(
+    Transaction transaction,
+    PlanoTask task,
+    SyncOperationType type,
+  ) async {
+    await transaction.insert('sync_queue', {
+      'entity': 'task',
+      'entity_id': task.id,
+      'type': type.name,
+      'payload': jsonEncode(_taskToSyncPayload(task)),
+      'attempts': 0,
+      'state': 'pending',
+      'created_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  Map<String, Object?> _taskToSyncPayload(PlanoTask task) => {
+    'id': task.id,
+    'title': task.title,
+    'notes': task.notes,
+    'duration_minutes': task.durationMinutes,
+    'priority': task.priority.name,
+    'due_date': task.dueDate?.toUtc().toIso8601String(),
+    'status': task.status.name,
+    'scheduled_start': task.scheduledStart?.toUtc().toIso8601String(),
+    'planned_end': task.plannedEnd?.toUtc().toIso8601String(),
+    'project': task.project,
+    'is_locked': task.isLocked,
+    'is_ai_proposed': task.isAiProposed,
+    'is_duration_estimated': task.isDurationEstimated,
+    'reminder_enabled': task.reminderEnabled,
+    'created_at': task.createdAt?.toUtc().toIso8601String(),
+    'updated_at': task.updatedAt?.toUtc().toIso8601String(),
+    'deleted_at': task.deletedAt?.toUtc().toIso8601String(),
+  };
+
+  Map<String, Object?> _taskToRemoteRow(PlanoTask task) => {
+    'id': task.id,
+    'title': task.title,
+    'notes': task.notes,
+    'duration_minutes': task.durationMinutes,
+    'priority': task.priority.name,
+    'due_date': task.dueDate?.toUtc().toIso8601String(),
+    'status': task.status.name,
+    'scheduled_start': task.scheduledStart?.toUtc().toIso8601String(),
+    'planned_end': task.plannedEnd?.toUtc().toIso8601String(),
+    'project': task.project,
+    'is_locked': task.isLocked ? 1 : 0,
+    'is_ai_proposed': task.isAiProposed ? 1 : 0,
+    'is_duration_estimated': task.isDurationEstimated ? 1 : 0,
+    'reminder_enabled': task.reminderEnabled ? 1 : 0,
+    'created_at': task.createdAt?.toUtc().toIso8601String(),
+    'updated_at': task.updatedAt?.toUtc().toIso8601String(),
+    'deleted_at': task.deletedAt?.toUtc().toIso8601String(),
+  };
+
+  bool _isRemoteNewer(PlanoTask remote, PlanoTask local) {
+    final remoteUpdated = remote.updatedAt;
+    final localUpdated = local.updatedAt;
+    if (remoteUpdated == null) return false;
+    if (localUpdated == null) return true;
+    return remoteUpdated.isAfter(localUpdated);
   }
 
   Map<String, Object?> _taskToRow(PlanoTask task, String now) => {

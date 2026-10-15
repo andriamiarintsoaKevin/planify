@@ -25,11 +25,32 @@ extension _PlanoSettingsScreen on _PlanoAppState {
                 'Mon espace',
                 style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              subtitle: const Text('Aucun compte connecté · données locales'),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () => _showMessage(
-                'La création de compte sera configurée avec Firebase.',
+              subtitle: Text(
+                _authRepository?.currentUser?.email ??
+                    'Aucun compte connecté · données locales',
               ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _showAccountDialog,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: ListTile(
+              leading: Icon(_syncIcon),
+              title: const Text(
+                'Synchronisation',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              subtitle: Text(_syncStatusLabel),
+              trailing: _syncStatus == SyncStatus.error
+                  ? TextButton(
+                      onPressed: _retrySync,
+                      child: const Text('Réessayer'),
+                    )
+                  : TextButton(
+                      onPressed: _requestSync,
+                      child: const Text('Actualiser'),
+                    ),
             ),
           ),
           const SizedBox(height: 14),
@@ -99,5 +120,24 @@ extension _PlanoSettingsScreen on _PlanoAppState {
         ],
       ),
     );
+  }
+
+  IconData get _syncIcon => switch (_syncStatus) {
+    SyncStatus.upToDate => Icons.cloud_done_outlined,
+    SyncStatus.pending => Icons.cloud_upload_outlined,
+    SyncStatus.error => Icons.cloud_off_outlined,
+    SyncStatus.offline => Icons.cloud_off_outlined,
+  };
+
+  String get _syncStatusLabel {
+    if (!AppConfig.isConfigured) {
+      return 'Local uniquement · configuration absente';
+    }
+    return switch (_syncStatus) {
+      SyncStatus.upToDate => 'À jour',
+      SyncStatus.pending => 'Synchronisation en attente',
+      SyncStatus.error => 'Erreur de synchronisation · réessayer',
+      SyncStatus.offline => 'Hors ligne · connexion facultative',
+    };
   }
 }

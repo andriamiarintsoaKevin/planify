@@ -91,6 +91,26 @@ flutter run --dart-define-from-file=env.dev.json
 
 Sans ces définitions, l’application conserve son mode local SQLite.
 
+### Authentification et sécurité Supabase
+
+La migration `supabase/migrations/20261015170000_create_tasks_with_rls.sql`
+crée uniquement la table `public.tasks`, active RLS et n’accorde l’accès qu’au
+rôle `authenticated`, avec une politique par opération et filtrage par
+utilisateur. Pour l’appliquer au projet de développement, ouvrez le SQL Editor
+du tableau de bord Supabase, collez le contenu de la migration et exécutez-le.
+La connexion et l’inscription sont facultatives ; les tâches locales restent
+utilisables sans compte. Aucun écran ne doit appeler `AuthService` directement :
+les opérations d’auth passent par `AuthRepository`.
+
+Pour vérifier l’isolation après application de la migration, créez dans
+Authentication > Users deux comptes de test non privilégiés, confirmez-les et
+lancez `python3 scripts/test_supabase_rls.py`. Le script lit localement
+`env.dev.json`, demande les deux adresses et mots de passe sans afficher les
+mots de passe, puis vérifie lecture, modification et suppression par B et par
+un client non connecté. Il crée une tâche temporaire sous A, vérifie qu’elle
+reste intacte puis la supprime avec A. Utilisez uniquement le projet de
+développement et des comptes de test.
+
 ## Compatibilité et distribution Android
 
 Planify est compatible avec Android 7.0 (API 24) et les versions ultérieures.

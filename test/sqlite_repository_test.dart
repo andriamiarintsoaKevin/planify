@@ -168,13 +168,19 @@ void main() {
 
     final upgradedDatabase = await databaseFactory.openDatabase(databasePath);
     final versionRows = await upgradedDatabase.rawQuery('PRAGMA user_version');
-    expect(versionRows.single.values.single, 5);
+    expect(versionRows.single.values.single, 6);
     final tables = await upgradedDatabase.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
     );
     expect(
       tables.map((row) => row['name']),
-      containsAll(['tasks', 'preferences', 'calendar_settings']),
+      containsAll([
+        'tasks',
+        'preferences',
+        'calendar_settings',
+        'sync_queue',
+        'sync_metadata',
+      ]),
     );
     expect(tables.map((row) => row['name']), isNot(contains('work_schedule')));
     final columns = await upgradedDatabase.rawQuery('PRAGMA table_info(tasks)');
@@ -188,6 +194,41 @@ void main() {
         'deleted_at',
       ]),
     );
+    final queued = await repository.loadSyncQueue();
+    expect(queued, hasLength(1));
+    expect(queued.single.entityId, migratedTask.id);
+    expect(queued.single.type.name, 'create');
     await upgradedDatabase.close();
+    await repository.close();
   });
+
+  test(
+    'enregistre les changements et suppressions dans la file locale',
+    () async {
+      final repository = SqlitePlanifyRepository(databasePath: databasePath);
+      const task = PlanoTask(id: 'queued-task', title: 'À synchroniser');
+
+      await repository.saveTasks([task]);
+      final createOperation = (await repository.loadSyncQueue()).single;
+      expect(createOperation.type.name, 'create');
+      expect(createOperation.payload['title'], task.title);
+
+      await repository.completeSyncOperation(createOperation.id);
+      await repository.saveTasks([task.copyWith(title: 'Mise à jour')]);
+      final updateOperation = (await repository.loadSyncQueue()).single;
+      expect(updateOperation.type.name, 'update');
+
+      await repository.softDeleteTask(task.id);
+      final queuedOperations = await repository.loadSyncQueue();
+      expect(queuedOperations.map((operation) => operation.type.name), [
+        'update',
+        'delete',
+      ]);
+      final deleteOperation = queuedOperations.last;
+      expect(deleteOperation.type.name, 'delete');
+      expect(deleteOperation.payload['deleted_at'], isNotNull);
+      expect(await repository.loadTasks(), isEmpty);
+      await repository.close();
+    },
+  );
 }
