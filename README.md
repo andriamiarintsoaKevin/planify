@@ -1,8 +1,9 @@
 # Planify
 
-Planify est une application Flutter locale en français pour organiser une journée :
+Planify est une application Flutter en français pour organiser une journée :
 capturer des tâches, préparer un planning déterministe, le prévisualiser et le
-valider, puis annuler la dernière validation.
+valider, puis annuler la dernière validation. Les données restent locales et
+peuvent être synchronisées avec Supabase après connexion facultative.
 
 ## Ce que l’application fait
 
@@ -31,14 +32,16 @@ valider, puis annuler la dernière validation.
 - Thème clair/sombre avec champs, panneaux, navigation et contrastes adaptés.
 - Tâches et préférences enregistrées localement dans une base SQLite, conservées
   après fermeture ou redémarrage de l’application jusqu’à leur suppression.
+- Authentification Supabase facultative, file de synchronisation hors ligne,
+  réception paginée et résolution des conflits par `updated_at`, avec priorité
+  aux suppressions logiques.
 
 ## Ce que l’application ne fait pas encore
 
-- Il n’y a pas de compte utilisateur, de backend, de base de données cloud ni de
-  synchronisation entre appareils. Une première installation démarre sans tâche
-  ni événement. Les tâches et les réglages sont stockés sur l’appareil dans
-  SQLite. La base locale est prise en charge sur Android, iOS, macOS, Windows et
-  Linux ; la version Web ne dispose pas de cet adaptateur SQLite.
+- Sans configuration Supabase et session, les données restent locales sur
+  l’appareil. Une première installation démarre sans tâche ni événement. La
+  base locale est prise en charge sur Android, iOS, macOS, Windows et Linux ; la
+  version Web ne dispose pas de cet adaptateur SQLite.
 - Les calendriers présents sur l’appareil peuvent être connectés en lecture
   seule sur Android et iOS. Un calendrier Google doit d’abord être synchronisé
   dans les réglages système de l’appareil. Planify ne modifie aucun événement.
@@ -61,15 +64,16 @@ valider, puis annuler la dernière validation.
   ses préférences et événements.
 - `lib/data/task_repository.dart` : contrat asynchrone de gestion des tâches.
 - `lib/data/sqlite_planify_repository.dart` : implémentation SQLite des tâches
-  et préférences, avec suppression logique.
+  et préférences, avec suppression logique et file de synchronisation.
+- `lib/data/task_sync_service.dart` et `lib/data/supabase_task_sync_remote.dart` :
+  moteur de synchronisation et adaptateur Supabase.
 - `lib/data/in_memory_planify_repository.dart` : dépôt temporaire destiné aux
   tests et aux aperçus de l’application.
 
 Les widgets d’interface sont répartis en fichiers `part` de la bibliothèque
 `main.dart` afin de garder les implémentations internes privées. Le moteur de
 planification reste indépendant de Flutter. L’application reçoit son dépôt par
-injection ; un futur adaptateur cloud pourra implémenter le même contrat sans
-lier les écrans au SDK d’un fournisseur.
+injection ; le moteur de synchronisation utilise un adaptateur distant distinct.
 
 ## Exécution et tests
 
@@ -93,14 +97,13 @@ Sans ces définitions, l’application conserve son mode local SQLite.
 
 ### Authentification et sécurité Supabase
 
-La migration `supabase/migrations/20261015170000_create_tasks_with_rls.sql`
-crée uniquement la table `public.tasks`, active RLS et n’accorde l’accès qu’au
-rôle `authenticated`, avec une politique par opération et filtrage par
-utilisateur. Pour l’appliquer au projet de développement, ouvrez le SQL Editor
-du tableau de bord Supabase, collez le contenu de la migration et exécutez-le.
-La connexion et l’inscription sont facultatives ; les tâches locales restent
-utilisables sans compte. Aucun écran ne doit appeler `AuthService` directement :
-les opérations d’auth passent par `AuthRepository`.
+Les migrations
+`supabase/migrations/20261015170000_create_tasks_with_rls.sql` et
+`supabase/migrations/20261015180000_enforce_task_sync_conflicts.sql` créent la
+table `public.tasks`, activent RLS et définissent la règle de conflit. Pour les
+appliquer au projet de développement, exécutez-les dans l'ordre dans le SQL
+Editor Supabase. La connexion et l'inscription sont facultatives ; les tâches
+locales restent utilisables sans compte.
 
 Pour vérifier l’isolation après application de la migration, créez dans
 Authentication > Users deux comptes de test non privilégiés, confirmez-les et
@@ -128,6 +131,10 @@ architecture :
 flutter build apk --release --split-per-abi
 ```
 
+Pour embarquer la configuration Supabase de développement dans les APK de test,
+ajoutez `--dart-define-from-file=env.dev.json` à la commande ci-dessus. Ne
+partagez pas ce fichier.
+
 Les fichiers sont créés dans `build/app/outputs/flutter-apk/`. Transmettez
 celui qui correspond au processeur de l’appareil :
 
@@ -147,19 +154,25 @@ clé de débogage : ces APK conviennent aux essais et au transfert direct, mais
 pas à une publication sur Google Play ni à des mises à jour de production.
 Avant publication, configurez une clé de signature privée et conservez-la
 durablement ; les mises à jour doivent garder la même clé et le même
-identifiant d’application.
+identifiant d’application. Le transfert d'APK ne transfère pas la base SQLite.
+Avec le même compte connecté et Supabase configuré, les tâches peuvent être
+synchronisées entre appareils.
 
-Enfin, le transfert de l’APK ne transfère pas les tâches ni les réglages :
-ceux-ci sont enregistrés dans une base SQLite sur chaque appareil. Planify
-n’inclut actuellement ni export/import ni synchronisation entre appareils.
+La base locale et sa file de synchronisation ne sont pas encore isolées par
+compte. Ne basculez pas entre comptes sur un même appareil avec des opérations
+en attente : celles-ci pourraient être envoyées sous le compte actif. Le test
+manuel sur deux appareils et le test RLS réel restent à exécuter avant de
+considérer l'intégration validée. Consulter
+[TEST_MANUEL_PLANIFY.txt](./TEST_MANUEL_PLANIFY.txt) pour les procédures et les
+points restants.
 
 ## Intégrations non incluses
 
 La connexion calendrier lit les calendriers fournis par le système mobile et
 ne nécessite pas d’identifiants OAuth Planify. Elle ne synchronise pas les
-tâches entre appareils.
+tâches du calendrier avec les tâches Planify.
 
-## Étapes proposées pour une version SaaS
+## Améliorations restantes avant une version de production
 
 1. Ajouter des contrats dédiés pour l’authentification, les abonnements et les
    snapshots de plan, ainsi que des entités de profil explicites.

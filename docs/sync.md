@@ -32,6 +32,14 @@ changeait pendant le téléchargement. Le curseur `task_sync_cursor` n'est avanc
 qu'après réception et merge de toutes les pages. RLS limite ces lectures et
 écritures au compte connecté.
 
+## Limite multi-compte
+
+SQLite et sa file de synchronisation sont actuellement partagées par les
+sessions d'un appareil, pas partitionnées par utilisateur. Ne changez pas de
+compte sur un appareil contenant des opérations en attente : elles pourraient
+être envoyées sous le compte nouvellement connecté. L'isolation locale par
+compte doit être ajoutée avant de prendre en charge ce scénario.
+
 ## États affichés
 
 - **À jour** : aucune opération locale en attente.
@@ -50,8 +58,8 @@ qu'après réception et merge de toutes les pages. RLS limite ces lectures et
    l'état **À jour**.
 3. Sur B, déclenchez **Actualiser** ou attendez le cycle de synchronisation :
    la tâche doit apparaître une seule fois.
-4. Modifiez la tâche sur A puis B avec le réseau ; vérifiez qu'après la
-   synchronisation, la version avec le `updated_at` le plus récent est visible
-   sur les deux appareils.
+4. Modifiez la tâche sur A puis B avec quelques secondes d'écart et le réseau ;
+   vérifiez qu'après la synchronisation, la version avec le `updated_at` le
+   plus récent est visible sur les deux appareils.
 5. Supprimez la tâche sur A, attendez **À jour**, puis vérifiez qu'elle reste
    absente sur B après actualisation.
