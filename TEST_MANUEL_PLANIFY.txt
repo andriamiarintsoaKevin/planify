@@ -42,7 +42,7 @@ AVANT DE COMMENCER
    le rappel arrive à l’heure prévue, même après avoir fermé l’application.
    Si les notifications sont refusées, vérifier que l’action « Réglages »
    ouvre les paramètres de notification de Planify.
-5. Enregistrer et vérifier que l’échéance est calculée depuis le début et la
+5. Enregistrer et vérifier que la fin planifiée est calculée depuis le début et la
    durée, sans champ Deadline dans le formulaire.
 6. Rouvrir la fiche, appuyer sur « Modifier la tâche », choisir « Supprimer »
    et confirmer le retour à une Inbox vide.
@@ -50,7 +50,7 @@ AVANT DE COMMENCER
 8. Vérifier qu’un créneau déjà passé est grisé et ne peut plus être ouvert ni
    supprimé.
 9. Depuis Aujourd’hui, faire glisser une tâche non verrouillée vers une autre
-   heure : le début et l’échéance changent, mais la durée reste identique.
+   heure : le début et la fin planifiée changent, mais la durée reste identique.
    Vérifier qu’une tâche verrouillée ne peut pas être déplacée.
 
 4. PRÉVISUALISER ET VALIDER UN PLAN

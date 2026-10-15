@@ -411,14 +411,14 @@ void main() {
         title: 'Tâche A',
         status: TaskStatus.scheduled,
         scheduledStart: start,
-        scheduledEnd: end,
+        plannedEnd: end,
       ),
       PlanoTask(
         id: 'overlap-b',
         title: 'Tâche B',
         status: TaskStatus.scheduled,
         scheduledStart: start,
-        scheduledEnd: end,
+        plannedEnd: end,
       ),
     ]);
     await tester.pumpWidget(PlanoApp(repository: repository));

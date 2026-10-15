@@ -20,19 +20,13 @@ void main() {
     prioritizeHighPriority: prioritizeHighPriority,
   );
 
-  test('la deadline détermine la fin du créneau planifié', () {
+  test('calcule la fin planifiée depuis le début et la durée', () {
     final start = DateTime(2026, 10, 11, 16);
-    final deadline = DateTime(2026, 10, 12, 6, 30);
 
     expect(
-      scheduledEndForTask(
-        start: start,
-        deadline: deadline,
-        durationMinutes: 30,
-      ),
-      deadline,
+      plannedEndForTask(start: start, durationMinutes: 30),
+      DateTime(2026, 10, 11, 16, 30),
     );
-    expect(deadline.difference(start).inMinutes, 14 * 60 + 30);
   });
 
   test('découpe un créneau de nuit entre ses deux journées', () {
@@ -41,7 +35,7 @@ void main() {
       title: 'Tâche de nuit',
       status: TaskStatus.scheduled,
       scheduledStart: DateTime(2026, 10, 11, 23),
-      scheduledEnd: DateTime(2026, 10, 12, 6),
+      plannedEnd: DateTime(2026, 10, 12, 6),
     );
 
     expect(taskOverlapsDay(task, DateTime(2026, 10, 11)), isTrue);
@@ -117,7 +111,7 @@ void main() {
             id: 'late',
             title: 'En retard',
             durationMinutes: 90,
-            deadline: at(0, 15),
+            dueDate: at(0, 15),
           ),
           const PlanoTask(id: 'estimated', title: 'Durée inconnue'),
         ],
@@ -139,7 +133,7 @@ void main() {
       durationMinutes: 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(1),
+      plannedEnd: at(1),
       isLocked: true,
     );
     final result = generatePlan(
@@ -166,7 +160,7 @@ void main() {
       title: 'Créneau du lendemain',
       status: TaskStatus.scheduled,
       scheduledStart: DateTime(day.year, day.month, day.day + 1, 10),
-      scheduledEnd: DateTime(day.year, day.month, day.day + 1, 11),
+      plannedEnd: DateTime(day.year, day.month, day.day + 1, 11),
       isLocked: true,
     );
     final result = generatePlan(
@@ -195,7 +189,7 @@ void main() {
       durationMinutes: 12 * 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(12),
+      plannedEnd: at(12),
       isLocked: true,
     );
     final result = generatePlan(
@@ -228,7 +222,7 @@ void main() {
       durationMinutes: 12 * 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(12),
+      plannedEnd: at(12),
       isLocked: true,
     );
     final result = generatePlan(
@@ -255,21 +249,21 @@ void main() {
         title: 'Première tâche',
         status: TaskStatus.scheduled,
         scheduledStart: at(10),
-        scheduledEnd: at(11),
+        plannedEnd: at(11),
       );
       final overlapping = PlanoTask(
         id: 'overlap',
         title: 'Tâche simultanée',
         status: TaskStatus.scheduled,
         scheduledStart: at(10, 30),
-        scheduledEnd: at(11, 30),
+        plannedEnd: at(11, 30),
       );
       final adjacent = PlanoTask(
         id: 'adjacent',
         title: 'Tâche suivante',
         status: TaskStatus.scheduled,
         scheduledStart: at(11),
-        scheduledEnd: at(12),
+        plannedEnd: at(12),
       );
 
       expect(hasScheduleOverlap(first, [overlapping]), isTrue);
@@ -283,7 +277,7 @@ void main() {
       title: 'Tâche terminée',
       status: TaskStatus.scheduled,
       scheduledStart: at(9),
-      scheduledEnd: at(10),
+      plannedEnd: at(10),
     );
 
     expect(isTaskPast(task, at(9, 59)), isFalse);

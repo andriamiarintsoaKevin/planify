@@ -358,7 +358,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
                     ),
                   for (final task in scheduled)
                     if (task.scheduledStart != null &&
-                        task.scheduledEnd != null &&
+                        task.plannedEnd != null &&
                         taskOverlapsDay(task, _selectedDate))
                       _positionedTimelineBlock(
                         start: taskVisibleStartOnDay(task, _selectedDate),

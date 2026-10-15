@@ -332,7 +332,7 @@ String _taskTimeRangeOnDay(PlanoTask task, DateTime day) {
   final end = taskVisibleEndOnDay(task, day);
   final dayEnd = DateTime(day.year, day.month, day.day + 1);
   final continued = task.scheduledStart!.isBefore(start);
-  final continuesTomorrow = task.scheduledEnd!.isAfter(dayEnd);
+  final continuesTomorrow = task.plannedEnd!.isAfter(dayEnd);
   return '${continued ? 'Suite · ' : ''}${_clock(start)}–${_clock(end)}'
       '${continuesTomorrow ? ' · suite demain' : ''}';
 }

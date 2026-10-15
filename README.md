@@ -11,8 +11,8 @@ valider, puis annuler la dernière validation.
   après validation d’un créneau.
 - Création et édition de tâches avec projet, durée de 15 minutes à 4 heures,
   priorité, notes, rappel local facultatif et verrouillage des créneaux.
-  L’échéance d’une tâche planifiée est automatiquement calculée depuis son
-  début et sa durée.
+  La fin planifiée est calculée depuis le début et la durée ; la date limite
+  reste une propriété distincte et facultative.
 - Les tâches sont différenciées par priorité : basse en vert, normale en indigo
   et haute en rouge, avec des teintes adaptées au thème clair ou sombre.
 - Planification manuelle d’une tâche à une date et une heure choisies, ainsi
@@ -24,7 +24,7 @@ valider, puis annuler la dernière validation.
   actuelle lorsqu’on planifie aujourd’hui et autour des horaires déjà fixés.
   La pause déjeuner, la marge entre les tâches et la priorité aux tâches
   urgentes sont des règles facultatives, désactivées par défaut.
-- Tri déterministe par deadline, priorité et durée. Les tâches sans durée sont
+- Tri déterministe par date limite, priorité et durée. Les tâches sans durée sont
   estimées à 30 minutes.
 - Aperçu du plan, liste des tâches qui ne rentrent pas, validation et annulation
   par snapshot en mémoire.
@@ -58,9 +58,10 @@ valider, puis annuler la dernière validation.
 - `lib/ui/theme/` : thème clair et sombre.
 - `lib/domain/planner.dart` : modèles de tâches et algorithme déterministe.
 - `lib/data/plano_repository.dart` : contrat asynchrone entre l’application et
-  ses données.
-- `lib/data/sqlite_planify_repository.dart` : stockage local persistant des
-  tâches et préférences.
+  ses préférences et événements.
+- `lib/data/task_repository.dart` : contrat asynchrone de gestion des tâches.
+- `lib/data/sqlite_planify_repository.dart` : implémentation SQLite des tâches
+  et préférences, avec suppression logique.
 - `lib/data/in_memory_planify_repository.dart` : dépôt temporaire destiné aux
   tests et aux aperçus de l’application.
 
@@ -78,6 +79,17 @@ flutter run
 flutter test
 flutter analyze
 ```
+
+Supabase peut être configuré au lancement sans fichier de secrets embarqué :
+copiez `env.example.json` dans le fichier local ignoré `env.dev.json`, puis
+renseignez l’URL et la clé publique `anon` du projet. Pour lancer l’application
+avec cette configuration :
+
+```sh
+flutter run --dart-define-from-file=env.dev.json
+```
+
+Sans ces définitions, l’application conserve son mode local SQLite.
 
 ## Compatibilité et distribution Android
 

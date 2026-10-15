@@ -35,10 +35,10 @@ void main() {
       notes: 'Relire les diapositives',
       durationMinutes: 45,
       priority: TaskPriority.high,
-      deadline: DateTime(2026, 10, 20, 16),
+      dueDate: DateTime(2026, 10, 20, 16),
       status: TaskStatus.scheduled,
       scheduledStart: DateTime(2026, 10, 20, 10),
-      scheduledEnd: DateTime(2026, 10, 20, 10, 45),
+      plannedEnd: DateTime(2026, 10, 20, 10, 45),
       project: 'Projet client',
       isLocked: true,
       isAiProposed: true,
@@ -61,25 +61,33 @@ void main() {
     expect(storedTask.notes, task.notes);
     expect(storedTask.durationMinutes, task.durationMinutes);
     expect(storedTask.priority, task.priority);
-    expect(storedTask.deadline, task.deadline);
+    expect(storedTask.dueDate, task.dueDate);
     expect(storedTask.status, task.status);
     expect(storedTask.scheduledStart, task.scheduledStart);
-    expect(storedTask.scheduledEnd, task.scheduledEnd);
+    expect(storedTask.plannedEnd, task.plannedEnd);
     expect(storedTask.project, task.project);
     expect(storedTask.isLocked, task.isLocked);
     expect(storedTask.isAiProposed, task.isAiProposed);
     expect(storedTask.isDurationEstimated, task.isDurationEstimated);
     expect(storedTask.reminderEnabled, isTrue);
+    expect(storedTask.createdAt, isNotNull);
+    expect(storedTask.updatedAt, isNotNull);
+    expect(storedTask.deletedAt, isNull);
     expect(await reopenedRepository.loadDarkMode(), isTrue);
     expect(await reopenedRepository.loadCalendarId(), 'google-calendar-id');
 
-    await reopenedRepository.saveTasks([]);
+    await reopenedRepository.softDeleteTask(task.id);
     await reopenedRepository.close();
 
     final repositoryAfterDeletion = SqlitePlanifyRepository(
       databasePath: databasePath,
     );
     expect(await repositoryAfterDeletion.loadTasks(), isEmpty);
+    final deletedRows = await (await databaseFactory.openDatabase(databasePath))
+        .query('tasks', where: 'id = ?', whereArgs: [task.id]);
+    expect(deletedRows, hasLength(1));
+    expect(deletedRows.single['deleted_at'], isNotNull);
+    expect(deletedRows.single['updated_at'], isNotNull);
     await repositoryAfterDeletion.close();
   });
 
@@ -128,10 +136,10 @@ void main() {
       'notes': '',
       'duration_minutes': null,
       'priority': TaskPriority.medium.name,
-      'deadline': null,
+      'deadline': DateTime(2026, 10, 12, 12).toIso8601String(),
       'status': TaskStatus.inbox.name,
-      'scheduled_start': null,
-      'scheduled_end': null,
+      'scheduled_start': DateTime(2026, 10, 12, 10).toIso8601String(),
+      'scheduled_end': DateTime(2026, 10, 12, 10, 30).toIso8601String(),
       'project': '',
       'is_locked': 0,
       'is_ai_proposed': 0,
@@ -140,13 +148,27 @@ void main() {
     await previousDatabase.close();
 
     final repository = SqlitePlanifyRepository(databasePath: databasePath);
-    expect((await repository.loadTasks()).single.title, 'Tâche à conserver');
+    final migratedTask = (await repository.loadTasks()).single;
+    expect(migratedTask.title, 'Tâche à conserver');
+    expect(
+      migratedTask.id,
+      matches(
+        RegExp(
+          r'^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
+        ),
+      ),
+    );
+    expect(migratedTask.createdAt, isNotNull);
+    expect(migratedTask.updatedAt, isNotNull);
+    expect(migratedTask.deletedAt, isNull);
+    expect(migratedTask.dueDate, DateTime(2026, 10, 12, 12));
+    expect(migratedTask.plannedEnd, DateTime(2026, 10, 12, 10, 30));
     expect(await repository.loadDarkMode(), isFalse);
     await repository.close();
 
     final upgradedDatabase = await databaseFactory.openDatabase(databasePath);
     final versionRows = await upgradedDatabase.rawQuery('PRAGMA user_version');
-    expect(versionRows.single.values.single, 3);
+    expect(versionRows.single.values.single, 5);
     final tables = await upgradedDatabase.rawQuery(
       "SELECT name FROM sqlite_master WHERE type = 'table'",
     );
@@ -155,6 +177,17 @@ void main() {
       containsAll(['tasks', 'preferences', 'calendar_settings']),
     );
     expect(tables.map((row) => row['name']), isNot(contains('work_schedule')));
+    final columns = await upgradedDatabase.rawQuery('PRAGMA table_info(tasks)');
+    expect(
+      columns.map((row) => row['name']),
+      containsAll([
+        'due_date',
+        'planned_end',
+        'created_at',
+        'updated_at',
+        'deleted_at',
+      ]),
+    );
     await upgradedDatabase.close();
   });
 }

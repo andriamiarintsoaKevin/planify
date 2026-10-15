@@ -383,7 +383,7 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       _showFormMessage('Choisissez une date et une heure à venir');
       return;
     }
-    final end = start.add(Duration(minutes: _duration));
+    final end = plannedEndForTask(start: start, durationMinutes: _duration)!;
     if (end.isAfter(_atTime(selectedDate, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
@@ -404,9 +404,12 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       );
       return;
     }
-    final scheduledEnd = _scheduledStart?.add(Duration(minutes: _duration));
+    final plannedEnd = plannedEndForTask(
+      start: _scheduledStart,
+      durationMinutes: _duration,
+    );
     if (_scheduledStart != null &&
-        scheduledEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
+        plannedEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
     }
@@ -414,24 +417,27 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       context,
       _TaskFormResult(
         task: PlanoTask(
-          id: old?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+          id: old?.id ?? generateTaskId(),
           title: title,
           notes: _notes.text.trim(),
           durationMinutes: _duration,
           priority: _priority,
-          deadline: scheduledEnd,
+          dueDate: old?.dueDate,
+          plannedEnd: plannedEnd,
           status: _scheduledStart != null
               ? TaskStatus.scheduled
               : old?.status == TaskStatus.scheduled
               ? TaskStatus.inbox
               : old?.status ?? TaskStatus.inbox,
           scheduledStart: _scheduledStart,
-          scheduledEnd: scheduledEnd,
           project: _project,
           isLocked: _locked && _scheduledStart != null,
           isAiProposed: old?.isAiProposed ?? false,
           isDurationEstimated: false,
           reminderEnabled: _reminderEnabled,
+          createdAt: old?.createdAt,
+          updatedAt: old?.updatedAt,
+          deletedAt: old?.deletedAt,
         ),
       ),
     );

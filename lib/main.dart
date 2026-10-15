@@ -9,6 +9,8 @@ import 'data/device_calendar_service.dart';
 import 'data/local_reminder_service.dart';
 import 'data/plano_repository.dart';
 import 'data/sqlite_planify_repository.dart';
+import 'data/task_id.dart';
+import 'data/task_repository.dart';
 import 'domain/planner.dart';
 
 import 'package:device_calendar_plus/device_calendar_plus.dart' show Calendar;
@@ -40,9 +42,10 @@ const _ink = Color(0xFF111827);
 const _canvas = Color(0xFFF7F7FB);
 
 class PlanoApp extends StatefulWidget {
-  const PlanoApp({super.key, this.repository});
+  const PlanoApp({super.key, this.repository, this.taskRepository});
 
   final PlanoRepository? repository;
+  final TaskRepository? taskRepository;
 
   @override
   State<PlanoApp> createState() => _PlanoAppState();
@@ -50,8 +53,16 @@ class PlanoApp extends StatefulWidget {
 
 class _PlanoAppState extends State<PlanoApp> {
   bool _darkMode = false;
+  late final SqlitePlanifyRepository _defaultRepository =
+      SqlitePlanifyRepository();
   late final PlanoRepository _repository =
-      widget.repository ?? SqlitePlanifyRepository();
+      widget.repository ?? _defaultRepository;
+  late final TaskRepository _taskRepository =
+      widget.taskRepository ??
+      switch (widget.repository) {
+        final TaskRepository taskRepository => taskRepository,
+        _ => _defaultRepository,
+      };
   final _calendarService = DeviceCalendarService();
   final _reminderService = LocalReminderService();
   final _tasks = <PlanoTask>[];
@@ -88,7 +99,7 @@ class _PlanoAppState extends State<PlanoApp> {
     });
     try {
       final values = await Future.wait<Object?>([
-        _repository.loadTasks(),
+        _taskRepository.loadTasks(),
         _repository.loadEvents(_selectedDate),
         _repository.loadDarkMode(),
         _repository.loadCalendarId(),
@@ -293,8 +304,9 @@ class _PlanoAppState extends State<PlanoApp> {
         _showMessage('Cette tâche passée ne peut plus être supprimée');
         return;
       }
-      setState(() => _tasks.removeWhere((item) => item.id == result.deleteId));
-      if (!await _persistTasks()) return;
+      if (taskToDelete.isNotEmpty) {
+        await _deleteTask(taskToDelete.first);
+      }
       return;
     }
     final updated = result.task!;
@@ -313,8 +325,7 @@ class _PlanoAppState extends State<PlanoApp> {
             updated.scheduledStart?.isAfter(DateTime.now()) == true &&
             defaultTargetPlatform == TargetPlatform.android &&
             !await _reminderService.requestExactAlarmPermission()) {
-          reminderPermissionIssue =
-              'l’alarme exacte est refusée : le rappel pourra être retardé par Android';
+          reminderPermissionIssue = 'l’alarme exacte est refusée : le rappel pourra être retardé par Android';
         }
       } on Object catch (error) {
         reminderPermissionIssue =
@@ -355,12 +366,7 @@ class _PlanoAppState extends State<PlanoApp> {
   Future<void> _captureTask(String title) async {
     if (title.trim().isEmpty) return;
     setState(() {
-      _tasks.add(
-        PlanoTask(
-          id: DateTime.now().microsecondsSinceEpoch.toString(),
-          title: title.trim(),
-        ),
-      );
+      _tasks.add(PlanoTask(id: generateTaskId(), title: title.trim()));
     });
     await _persistTasks();
   }
@@ -394,7 +400,7 @@ class _PlanoAppState extends State<PlanoApp> {
           (task) =>
               task.status == TaskStatus.inbox &&
               task.scheduledStart == null &&
-              task.scheduledEnd == null,
+              task.plannedEnd == null,
         ),
       );
     } else {
@@ -408,7 +414,7 @@ class _PlanoAppState extends State<PlanoApp> {
       }
       if (onlyTask.status != TaskStatus.inbox ||
           onlyTask.scheduledStart != null ||
-          onlyTask.scheduledEnd != null) {
+          onlyTask.plannedEnd != null) {
         _showMessage(
           'Seules les tâches sans horaire peuvent être réorganisées',
         );
@@ -425,13 +431,13 @@ class _PlanoAppState extends State<PlanoApp> {
       for (final task in _tasks)
         if (task.status == TaskStatus.scheduled &&
             task.scheduledStart != null &&
-            task.scheduledEnd != null &&
-            task.scheduledEnd!.isAfter(date) &&
+            task.plannedEnd != null &&
+            task.plannedEnd!.isAfter(date) &&
             task.scheduledStart!.isBefore(_atTime(date, 24, 0)))
           FixedEvent(
             title: task.title,
             start: task.scheduledStart!,
-            end: task.scheduledEnd!,
+            end: task.plannedEnd!,
           ),
     ];
     while (mounted) {
@@ -457,9 +463,11 @@ class _PlanoAppState extends State<PlanoApp> {
           dayEnd: _atTime(date, 24, 0),
           lunchStart: options.respectLunch ? _atTime(date, 12, 30) : null,
           lunchEnd: options.respectLunch
-              ? _atTime(date, 12, 30).add(
-                  Duration(minutes: options.lunchDurationMinutes),
-                )
+              ? _atTime(
+                  date,
+                  12,
+                  30,
+                ).add(Duration(minutes: options.lunchDurationMinutes))
               : null,
           bufferMinutes: options.addBuffer ? 10 : 0,
           prioritizeHighPriority: options.prioritizeHighPriority,
@@ -490,8 +498,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _tasks[index] = _tasks[index].copyWith(
           status: TaskStatus.scheduled,
           scheduledStart: placement.start,
-          scheduledEnd: placement.end,
-          deadline: placement.end,
+          plannedEnd: placement.end,
           isAiProposed: false,
           durationMinutes: placement.task.durationMinutes ?? 30,
           isDurationEstimated: placement.task.durationMinutes == null,
@@ -504,7 +511,6 @@ class _PlanoAppState extends State<PlanoApp> {
         _tasks[index] = _tasks[index].copyWith(
           status: TaskStatus.inbox,
           clearSchedule: true,
-          clearDeadline: true,
         );
       }
     });
@@ -536,8 +542,13 @@ class _PlanoAppState extends State<PlanoApp> {
       _showMessage('Cette tâche passée ne peut plus être supprimée');
       return;
     }
+    try {
+      await _taskRepository.softDeleteTask(task.id);
+    } on Object catch (error) {
+      _showMessage('Impossible de supprimer la tâche : $error');
+      return;
+    }
     setState(() => _tasks.removeWhere((item) => item.id == task.id));
-    if (!await _persistTasks()) return;
     String? reminderIssue;
     try {
       await _reminderService.cancelTask(task);
@@ -566,7 +577,7 @@ class _PlanoAppState extends State<PlanoApp> {
 
   Future<bool> _persistTasks() async {
     try {
-      await _repository.saveTasks(List.unmodifiable(_tasks));
+      await _taskRepository.saveTasks(List.unmodifiable(_tasks));
       try {
         await _syncAllReminders();
       } on Object catch (error) {
@@ -717,8 +728,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _tasks[index] = _tasks[index].copyWith(
           status: TaskStatus.scheduled,
           scheduledStart: start,
-          scheduledEnd: end,
-          deadline: end,
+          plannedEnd: end,
         );
       }
     });

@@ -110,7 +110,7 @@ class _TaskDetailsSheet extends StatelessWidget {
                           child: Text(
                             '${_formatDate(task.scheduledStart!)} · '
                             '${_clock(task.scheduledStart!)}–'
-                            '${_clock(task.scheduledEnd ?? task.scheduledStart!)}',
+                            '${_clock(task.plannedEnd ?? task.scheduledStart!)}',
                             style: const TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
@@ -132,9 +132,8 @@ class _TaskDetailsSheet extends StatelessWidget {
                   const SizedBox(height: 18),
                   Text(
                     'Notes',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                    style: Theme.of(context).textTheme.labelLarge
+                        ?.copyWith(fontWeight: FontWeight.w700),
                   ),
                   const SizedBox(height: 6),
                   Text(task.notes, style: const TextStyle(height: 1.4)),
