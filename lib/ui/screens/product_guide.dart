@@ -23,22 +23,22 @@ class _ProductGuideScreen extends StatelessWidget {
           ),
           _GuideSection(
             title: 'Ce que Planify sait faire ici',
-            body: 'Créer et modifier des tâches, ajouter un projet facultatif, une priorité et une deadline, puis organiser les tâches de l’Inbox qui n’ont pas encore d’horaire. Les horaires déjà fixés sont conservés et les créneaux passés sont ignorés. La pause déjeuner, la marge et le placement des tâches difficiles le matin restent optionnels. Vous pouvez prévisualiser, modifier, valider ou annuler le plan.',
+            body: 'Créer et modifier des tâches d’une durée de 15 minutes à 4 heures, ajouter un projet, une priorité et des notes, puis organiser les tâches de l’Inbox qui n’ont pas encore d’horaire. L’échéance d’une tâche planifiée est calculée automatiquement à partir de son début et de sa durée. Les tâches non verrouillées peuvent être déplacées à la main sur le calendrier sans changer leur durée. Vous pouvez prévisualiser, modifier, valider ou annuler le plan.',
             icon: Icons.check_circle_outline,
           ),
           _GuideSection(
             title: 'Ce qui n’est pas encore connecté',
-            body: 'Pas de création de compte, synchronisation cloud entre appareils, import de calendrier, notifications, abonnement payant, suivi serveur ni assistant IA. Les données locales ne sont pas synchronisées entre appareils.',
+            body: 'Pas de compte ni de synchronisation cloud. Les calendriers du téléphone, y compris Google lorsqu’il y est synchronisé, sont consultés en lecture seule. Des rappels locaux sont disponibles pour les tâches planifiées si l’autorisation système est accordée.',
             icon: Icons.cloud_off_outlined,
           ),
           _GuideSection(
             title: 'Pour en faire un SaaS',
-            body: 'Il faudra ajouter un backend sécurisé pour les comptes et les données, synchroniser les tâches par utilisateur, connecter les calendriers en lecture seule, puis intégrer les abonnements et le suivi des quotas. La planification doit rester déterministe côté produit.',
+            body: 'Il faudra ajouter un backend sécurisé pour les comptes et les données, synchroniser les tâches par utilisateur, puis intégrer les abonnements et le suivi des quotas. La planification doit rester déterministe côté produit.',
             icon: Icons.cloud_outlined,
           ),
           const SizedBox(height: 12),
           Text(
-            'Rien n’est envoyé à un service distant dans cette version.',
+            'Les tâches restent sur cet appareil. La lecture du calendrier se fait via le système mobile.',
             textAlign: TextAlign.center,
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,

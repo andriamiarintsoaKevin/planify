@@ -80,11 +80,13 @@ class _TaskFormResult {
 class _PlannerOptions {
   const _PlannerOptions({
     required this.respectLunch,
+    required this.lunchDurationMinutes,
     required this.prioritizeHighPriority,
     required this.addBuffer,
   });
 
   final bool respectLunch;
+  final int lunchDurationMinutes;
   final bool prioritizeHighPriority;
   final bool addBuffer;
 }
@@ -146,8 +148,10 @@ Widget _badge(String label, Color background, Color foreground) => Container(
   ),
 );
 
-InputDecoration _inputDecoration(String hint, BuildContext context) =>
-    InputDecoration(
+InputDecoration _inputDecoration(
+  String hint,
+  BuildContext context,
+) => InputDecoration(
   hintText: hint,
   filled: true,
   fillColor: Theme.of(context).colorScheme.surfaceContainer,
@@ -161,17 +165,164 @@ InputDecoration _inputDecoration(String hint, BuildContext context) =>
   ),
 );
 
+OverlayEntry? _activeTopNotification;
+
+void _showTopNotification(
+  BuildContext context,
+  String message, {
+  String? actionLabel,
+  VoidCallback? onAction,
+}) {
+  final activeNotification = _activeTopNotification;
+  if (activeNotification != null && activeNotification.mounted) {
+    activeNotification.remove();
+  }
+
+  late final OverlayEntry entry;
+  entry = OverlayEntry(
+    builder: (_) => Positioned(
+      top: 4,
+      left: 20,
+      right: 20,
+      child: SafeArea(
+        bottom: false,
+        child: _TimedTopNotification(
+          message: message,
+          actionLabel: actionLabel,
+          onAction: onAction,
+          onDismiss: () {
+            if (identical(_activeTopNotification, entry)) {
+              _activeTopNotification = null;
+            }
+            if (entry.mounted) entry.remove();
+          },
+        ),
+      ),
+    ),
+  );
+  _activeTopNotification = entry;
+  Overlay.of(context).insert(entry);
+}
+
+class _TimedTopNotification extends StatefulWidget {
+  const _TimedTopNotification({
+    required this.message,
+    required this.onDismiss,
+    this.actionLabel,
+    this.onAction,
+  });
+
+  final String message;
+  final String? actionLabel;
+  final VoidCallback? onAction;
+  final VoidCallback onDismiss;
+
+  @override
+  State<_TimedTopNotification> createState() => _TimedTopNotificationState();
+}
+
+class _TimedTopNotificationState extends State<_TimedTopNotification>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _progress;
+
+  @override
+  void initState() {
+    super.initState();
+    _progress =
+        AnimationController(
+          vsync: this,
+          duration: const Duration(milliseconds: 2800),
+        )..addStatusListener((status) {
+          if (status == AnimationStatus.completed) widget.onDismiss();
+        });
+    _progress.forward();
+  }
+
+  @override
+  void dispose() {
+    _progress.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final snackTheme = theme.snackBarTheme;
+    final background =
+        snackTheme.backgroundColor ?? theme.colorScheme.inverseSurface;
+    final foreground =
+        snackTheme.contentTextStyle?.color ??
+        theme.colorScheme.onInverseSurface;
+    return Material(
+      color: background,
+      elevation: 8,
+      borderRadius: BorderRadius.circular(12),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 6, 4, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.message,
+                    style: snackTheme.contentTextStyle?.copyWith(
+                      color: foreground,
+                    ),
+                  ),
+                ),
+                if (widget.actionLabel != null && widget.onAction != null)
+                  TextButton(
+                    onPressed: () {
+                      widget.onAction!();
+                      widget.onDismiss();
+                    },
+                    child: Text(widget.actionLabel!),
+                  ),
+                IconButton(
+                  tooltip: 'Fermer',
+                  onPressed: widget.onDismiss,
+                  icon: Icon(Icons.close, color: foreground, size: 16),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          AnimatedBuilder(
+            animation: _progress,
+            builder: (context, _) => LinearProgressIndicator(
+              value: 1 - _progress.value,
+              minHeight: 2,
+              backgroundColor: foreground.withValues(alpha: .18),
+              valueColor: AlwaysStoppedAnimation<Color>(foreground),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 String _priorityLabel(TaskPriority priority) => switch (priority) {
   TaskPriority.low => 'Basse',
   TaskPriority.medium => 'Normale',
   TaskPriority.high => 'Haute',
 };
 
-String _durationLabel(int minutes) => minutes == 60
-    ? '1 h'
-    : minutes == 120
-    ? '2 h'
-    : '$minutes min';
+String _durationLabel(int minutes) {
+  final hours = minutes ~/ 60;
+  final remainingMinutes = minutes % 60;
+  if (hours == 0) return '$minutes min';
+  if (remainingMinutes == 0) return '$hours h';
+  return '$hours h $remainingMinutes min';
+}
 
 String _clock(DateTime dateTime) =>
     '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
@@ -181,7 +332,7 @@ String _taskTimeRangeOnDay(PlanoTask task, DateTime day) {
   final end = taskVisibleEndOnDay(task, day);
   final dayEnd = DateTime(day.year, day.month, day.day + 1);
   final continued = task.scheduledStart!.isBefore(start);
-  final continuesTomorrow = task.scheduledEnd!.isAfter(dayEnd);
+  final continuesTomorrow = task.plannedEnd!.isAfter(dayEnd);
   return '${continued ? 'Suite · ' : ''}${_clock(start)}–${_clock(end)}'
       '${continuesTomorrow ? ' · suite demain' : ''}';
 }

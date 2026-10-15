@@ -23,6 +23,7 @@ class _QuickCaptureState extends State<_QuickCapture> {
     if (value.isEmpty) return;
     widget.onSubmit(value);
     _controller.clear();
+    FocusScope.of(context).unfocus();
   }
 
   @override
@@ -66,10 +67,15 @@ class _QuickCaptureState extends State<_QuickCapture> {
 }
 
 class _TaskEditorSheet extends StatefulWidget {
-  const _TaskEditorSheet({this.task, required this.initialScheduleDate});
+  const _TaskEditorSheet({
+    this.task,
+    required this.initialScheduleDate,
+    required this.remindersAvailable,
+  });
 
   final PlanoTask? task;
   final DateTime initialScheduleDate;
+  final bool remindersAvailable;
 
   @override
   State<_TaskEditorSheet> createState() => _TaskEditorSheetState();
@@ -78,11 +84,13 @@ class _TaskEditorSheet extends StatefulWidget {
 class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   late final TextEditingController _title;
   late final TextEditingController _notes;
-  late int? _duration;
+  late final TextEditingController _durationController;
+  late int _duration;
+  bool _durationInHours = false;
   late TaskPriority _priority;
   late String _project;
   late bool _locked;
-  DateTime? _deadline;
+  late bool _reminderEnabled;
   DateTime? _scheduledStart;
 
   @override
@@ -91,11 +99,17 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     final task = widget.task;
     _title = TextEditingController(text: task?.title ?? '');
     _notes = TextEditingController(text: task?.notes ?? '');
-    _duration = task?.durationMinutes ?? 30;
+    final storedDuration = task?.durationMinutes ?? 30;
+    _duration = storedDuration < 15
+        ? 15
+        : storedDuration > 240
+        ? 240
+        : storedDuration;
+    _durationController = TextEditingController(text: '$_duration');
     _priority = task?.priority ?? TaskPriority.medium;
     _project = task?.project ?? '';
     _locked = task?.isLocked ?? false;
-    _deadline = task?.deadline;
+    _reminderEnabled = task?.reminderEnabled ?? false;
     _scheduledStart = task?.scheduledStart;
   }
 
@@ -103,14 +117,14 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
   void dispose() {
     _title.dispose();
     _notes.dispose();
+    _durationController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final editing = widget.task != null;
-    final canLockSchedule =
-        _scheduledStart != null;
+    final canLockSchedule = _scheduledStart != null;
     return DraggableScrollableSheet(
       initialChildSize: .88,
       minChildSize: .65,
@@ -186,6 +200,38 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
               onChanged: (value) => _project = value.trim(),
             ),
             const SizedBox(height: 20),
+            const _FieldLabel('Durée estimée'),
+            const SizedBox(height: 8),
+            TextFormField(
+              key: const ValueKey('task-duration-input'),
+              controller: _durationController,
+              keyboardType: TextInputType.numberWithOptions(
+                decimal: _durationInHours,
+              ),
+              decoration: _inputDecoration('Ex. 30', context).copyWith(
+                prefixIcon: const Icon(Icons.schedule_outlined),
+                suffixText: _durationInHours ? 'h' : 'min',
+              ),
+              onChanged: _updateDuration,
+            ),
+            const SizedBox(height: 10),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('Minutes')),
+                ButtonSegment(value: true, label: Text('Heures')),
+              ],
+              selected: {_durationInHours},
+              onSelectionChanged: (selection) =>
+                  _changeDurationUnit(selection.first),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              'De 15 min à 4 h. Une durée en heures peut être décimale, par exemple 1,5 h.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 20),
             const _FieldLabel('Planifier le'),
             const SizedBox(height: 8),
             OutlinedButton.icon(
@@ -215,43 +261,6 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                   child: const Text('Retirer du planning'),
                 ),
               ),
-            const SizedBox(height: 20),
-            const _FieldLabel('Deadline'),
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: _chooseDeadline,
-              icon: const Icon(Icons.event_outlined),
-              label: Text(
-                _deadline == null
-                    ? 'Ajouter une échéance'
-                    : '${_formatDate(_deadline!)} à ${_clock(_deadline!)}',
-              ),
-              style: OutlinedButton.styleFrom(
-                alignment: Alignment.centerLeft,
-                minimumSize: const Size.fromHeight(48),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            if (_deadline != null && _scheduledStart != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 6),
-                child: Text(
-                  'Le créneau se terminera à la deadline.',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            if (_deadline != null)
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => setState(() => _deadline = null),
-                  child: const Text('Retirer la deadline'),
-                ),
-              ),
             const SizedBox(height: 18),
             const _FieldLabel('Priorité'),
             const SizedBox(height: 8),
@@ -269,18 +278,41 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
                   setState(() => _priority = selection.first),
             ),
             const SizedBox(height: 14),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Verrouiller l’horaire'),
-              subtitle: Text(canLockSchedule
-                  ? 'Le planificateur ne déplacera pas cette tâche'
-                  : 'Choisissez d’abord une date et une heure'),
-              value: _locked,
-              activeThumbColor: _primary,
-              onChanged: canLockSchedule
-                  ? (value) => setState(() => _locked = value)
-                  : null,
+            Material(
+              color: Colors.transparent,
+              child: SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Verrouiller l’horaire'),
+                subtitle: Text(
+                  canLockSchedule
+                      ? 'Le planificateur ne déplacera pas cette tâche'
+                      : 'Choisissez d’abord une date et une heure',
+                ),
+                value: _locked,
+                activeThumbColor: _primary,
+                onChanged: canLockSchedule
+                    ? (value) => setState(() => _locked = value)
+                    : null,
+              ),
             ),
+            if (widget.remindersAvailable)
+              Material(
+                color: Colors.transparent,
+                child: SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  secondary: const Icon(Icons.notifications_active_outlined),
+                  title: const Text('Me rappeler cette tâche'),
+                  subtitle: Text(
+                    _scheduledStart == null
+                        ? 'Le rappel sera programmé après avoir choisi une date et une heure'
+                        : 'Notification à ${_clock(_scheduledStart!)}',
+                  ),
+                  value: _reminderEnabled,
+                  activeThumbColor: _primary,
+                  onChanged: (value) =>
+                      setState(() => _reminderEnabled = value),
+                ),
+              ),
             const SizedBox(height: 10),
             const _FieldLabel('Notes'),
             const SizedBox(height: 8),
@@ -313,39 +345,13 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
     );
   }
 
-  Future<void> _chooseDeadline() async {
-    final now = DateTime.now();
-    final selected = await showDatePicker(
-      context: context,
-      initialDate: _deadline ?? _dateOnly(now),
-      firstDate: _dateOnly(now),
-      lastDate: now.add(const Duration(days: 365)),
-      locale: const Locale('fr', 'FR'),
-    );
-    if (selected == null || !mounted) return;
-    final time = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(
-        _deadline ?? DateTime(selected.year, selected.month, selected.day, 17),
-      ),
-    );
-    if (time != null) {
-      final deadline = DateTime(
-        selected.year,
-        selected.month,
-        selected.day,
-        time.hour,
-        time.minute,
-      );
-      if (_scheduledStart != null && !deadline.isAfter(_scheduledStart!)) {
-        _showFormMessage('La deadline doit être après le début de la tâche');
-        return;
-      }
-      setState(() => _deadline = deadline);
-    }
-  }
-
   Future<void> _chooseSchedule() async {
+    if (_duration < 15 || _duration > 240) {
+      _showFormMessage(
+        'La durée doit être comprise entre 15 minutes et 4 heures',
+      );
+      return;
+    }
     final now = DateTime.now();
     final firstDate = _dateOnly(now);
     final initialDate = _scheduledStart ?? widget.initialScheduleDate;
@@ -377,16 +383,8 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       _showFormMessage('Choisissez une date et une heure à venir');
       return;
     }
-    if (_deadline != null && !_deadline!.isAfter(start)) {
-      _showFormMessage('La deadline doit être après le début de la tâche');
-      return;
-    }
-    final end = scheduledEndForTask(
-      start: start,
-      deadline: _deadline,
-      durationMinutes: _duration,
-    )!;
-    if (_deadline == null && end.isAfter(_atTime(selectedDate, 24, 0))) {
+    final end = plannedEndForTask(start: start, durationMinutes: _duration)!;
+    if (end.isAfter(_atTime(selectedDate, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
     }
@@ -400,20 +398,18 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       return;
     }
     final old = widget.task;
-    if (_scheduledStart != null &&
-        _deadline != null &&
-        !_deadline!.isAfter(_scheduledStart!)) {
-      _showFormMessage('La deadline doit être après le début de la tâche');
+    if (_duration < 15 || _duration > 240) {
+      _showFormMessage(
+        'La durée doit être comprise entre 15 minutes et 4 heures',
+      );
       return;
     }
-    final scheduledEnd = scheduledEndForTask(
+    final plannedEnd = plannedEndForTask(
       start: _scheduledStart,
-      deadline: _deadline,
       durationMinutes: _duration,
     );
     if (_scheduledStart != null &&
-        _deadline == null &&
-        scheduledEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
+        plannedEnd!.isAfter(_atTime(_scheduledStart!, 24, 0))) {
       _showFormMessage('La tâche doit se terminer avant minuit');
       return;
     }
@@ -421,36 +417,63 @@ class _TaskEditorSheetState extends State<_TaskEditorSheet> {
       context,
       _TaskFormResult(
         task: PlanoTask(
-          id: old?.id ?? DateTime.now().microsecondsSinceEpoch.toString(),
+          id: old?.id ?? generateTaskId(),
           title: title,
           notes: _notes.text.trim(),
-          durationMinutes: scheduledEnd == null
-              ? _duration
-              : scheduledEnd.difference(_scheduledStart!).inMinutes,
+          durationMinutes: _duration,
           priority: _priority,
-          deadline: _deadline,
+          dueDate: old?.dueDate,
+          plannedEnd: plannedEnd,
           status: _scheduledStart != null
               ? TaskStatus.scheduled
               : old?.status == TaskStatus.scheduled
               ? TaskStatus.inbox
               : old?.status ?? TaskStatus.inbox,
           scheduledStart: _scheduledStart,
-          scheduledEnd: scheduledEnd,
           project: _project,
           isLocked: _locked && _scheduledStart != null,
           isAiProposed: old?.isAiProposed ?? false,
-          isDurationEstimated: _duration == null ||
-              (old?.isDurationEstimated ?? false),
+          isDurationEstimated: false,
+          reminderEnabled: _reminderEnabled,
+          createdAt: old?.createdAt,
+          updatedAt: old?.updatedAt,
+          deletedAt: old?.deletedAt,
         ),
       ),
     );
   }
 
-  void _showFormMessage(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+  void _updateDuration(String value) {
+    if (_durationInHours) {
+      final hours = double.tryParse(value.replaceAll(',', '.'));
+      _duration = hours == null || !hours.isFinite ? 0 : (hours * 60).round();
+    } else {
+      _duration = int.tryParse(value) ?? 0;
+    }
+  }
+
+  void _changeDurationUnit(bool inHours) {
+    _updateDuration(_durationController.text);
+    setState(() {
+      _durationInHours = inHours;
+      _durationController.text = inHours
+          ? _formatHours(_duration)
+          : '$_duration';
+      _durationController.selection = TextSelection.collapsed(
+        offset: _durationController.text.length,
       );
+    });
+  }
+
+  String _formatHours(int durationMinutes) {
+    final hours = durationMinutes / 60;
+    return hours
+        .toStringAsFixed(2)
+        .replaceFirst(RegExp(r'\.?0+$'), '')
+        .replaceAll('.', ',');
+  }
+
+  void _showFormMessage(String message) {
+    _showTopNotification(context, message);
   }
 }

@@ -17,6 +17,7 @@ class _PlannerSetupSheet extends StatefulWidget {
 
 class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
   bool _respectLunch = false;
+  int _lunchDurationMinutes = 30;
   bool _prioritizeHighPriority = false;
   bool _addBuffer = false;
 
@@ -24,98 +25,128 @@ class _PlannerSetupSheetState extends State<_PlannerSetupSheet> {
   Widget build(BuildContext context) {
     final hours = widget.totalMinutes ~/ 60;
     final minutes = widget.totalMinutes % 60;
+    final colorScheme = Theme.of(context).colorScheme;
     return SafeArea(
       child: Material(
-        color: Theme.of(context).scaffoldBackgroundColor,
+        color: colorScheme.surface,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 38,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.outlineVariant,
-                    borderRadius: BorderRadius.circular(6),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.outlineVariant,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-              const Text(
-                'Préparer le plan',
-                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                '${widget.taskCount} tâches · ${hours}h ${minutes}min · ${widget.fixedCount} événement fixe',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                const SizedBox(height: 20),
+                const Text(
+                  'Préparer le plan',
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w700),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                'Les 24 heures sont disponibles. Active uniquement les règles que tu souhaites appliquer.',
-                style: TextStyle(
-                  color: Theme.of(context).colorScheme.onSurfaceVariant,
-                ),
-              ),
-              const SizedBox(height: 8),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Réserver une pause déjeuner'),
-                value: _respectLunch,
-                activeThumbColor: _primary,
-                onChanged: (value) => setState(() => _respectLunch = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Planifier les priorités hautes en premier'),
-                value: _prioritizeHighPriority,
-                activeThumbColor: _primary,
-                onChanged: (value) =>
-                    setState(() => _prioritizeHighPriority = value),
-              ),
-              SwitchListTile(
-                contentPadding: EdgeInsets.zero,
-                title: const Text('Laisser 10 min entre les tâches'),
-                value: _addBuffer,
-                activeThumbColor: _primary,
-                onChanged: (value) => setState(() => _addBuffer = value),
-              ),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: () => Navigator.pop(
-                  context,
-                  _PlannerOptions(
-                    respectLunch: _respectLunch,
-                    prioritizeHighPriority: _prioritizeHighPriority,
-                    addBuffer: _addBuffer,
-                  ),
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: _primary,
-                  minimumSize: const Size.fromHeight(52),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                child: const Text('Générer le plan'),
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(
-                  'Le plan est généré automatiquement sur cet appareil.',
+                const SizedBox(height: 8),
+                Text(
+                  '${widget.taskCount} tâches · ${hours}h ${minutes}min · ${widget.fixedCount} événement fixe',
                   style: TextStyle(
-                    fontSize: 12,
                     color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  'Les 24 heures sont disponibles. Active uniquement les règles que tu souhaites appliquer.',
+                  style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Réserver une pause déjeuner'),
+                  value: _respectLunch,
+                  activeThumbColor: colorScheme.primary,
+                  onChanged: (value) => setState(() => _respectLunch = value),
+                ),
+                if (_respectLunch) ...[
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Text(
+                      'Durée de la pause · 12:30',
+                      style: Theme.of(context).textTheme.bodySmall
+                          ?.copyWith(color: colorScheme.onSurfaceVariant),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final duration in [15, 20, 25, 30, 35, 40])
+                        ChoiceChip(
+                          label: Text('$duration min'),
+                          selected: _lunchDurationMinutes == duration,
+                          onSelected: (_) =>
+                              setState(() => _lunchDurationMinutes = duration),
+                        ),
+                    ],
+                  ),
+                ],
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Planifier les priorités hautes en premier',
+                  ),
+                  value: _prioritizeHighPriority,
+                  activeThumbColor: colorScheme.primary,
+                  onChanged: (value) =>
+                      setState(() => _prioritizeHighPriority = value),
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Laisser 10 min entre les tâches'),
+                  value: _addBuffer,
+                  activeThumbColor: colorScheme.primary,
+                  onChanged: (value) => setState(() => _addBuffer = value),
+                ),
+                const SizedBox(height: 12),
+                FilledButton(
+                  onPressed: () => Navigator.pop(
+                    context,
+                    _PlannerOptions(
+                      respectLunch: _respectLunch,
+                      lunchDurationMinutes: _lunchDurationMinutes,
+                      prioritizeHighPriority: _prioritizeHighPriority,
+                      addBuffer: _addBuffer,
+                    ),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: colorScheme.primary,
+                    foregroundColor: colorScheme.onPrimary,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Générer le plan'),
+                ),
+                const SizedBox(height: 8),
+                Center(
+                  child: Text(
+                    'Le plan est généré automatiquement sur cet appareil.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),

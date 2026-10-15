@@ -20,19 +20,13 @@ void main() {
     prioritizeHighPriority: prioritizeHighPriority,
   );
 
-  test('la deadline détermine la fin du créneau planifié', () {
+  test('calcule la fin planifiée depuis le début et la durée', () {
     final start = DateTime(2026, 10, 11, 16);
-    final deadline = DateTime(2026, 10, 12, 6, 30);
 
     expect(
-      scheduledEndForTask(
-        start: start,
-        deadline: deadline,
-        durationMinutes: 30,
-      ),
-      deadline,
+      plannedEndForTask(start: start, durationMinutes: 30),
+      DateTime(2026, 10, 11, 16, 30),
     );
-    expect(deadline.difference(start).inMinutes, 14 * 60 + 30);
   });
 
   test('découpe un créneau de nuit entre ses deux journées', () {
@@ -41,7 +35,7 @@ void main() {
       title: 'Tâche de nuit',
       status: TaskStatus.scheduled,
       scheduledStart: DateTime(2026, 10, 11, 23),
-      scheduledEnd: DateTime(2026, 10, 12, 6),
+      plannedEnd: DateTime(2026, 10, 12, 6),
     );
 
     expect(taskOverlapsDay(task, DateTime(2026, 10, 11)), isTrue);
@@ -61,7 +55,14 @@ void main() {
   test('ne planifie aucune tâche avant le début futur de la journée', () {
     final start = at(16);
     final result = generatePlan(
-      tasks: const [PlanoTask(id: 'future', title: 'Tâche future')],
+      tasks: const [
+        PlanoTask(id: 'future', title: 'Tâche future'),
+        PlanoTask(
+          id: 'future-2',
+          title: 'Autre tâche future',
+          durationMinutes: 45,
+        ),
+      ],
       fixedEvents: [],
       settings: PlanSettings(
         dayStart: start,
@@ -69,7 +70,11 @@ void main() {
       ),
     );
 
-    expect(result.placements.single.start.isBefore(start), isFalse);
+    expect(result.placements, hasLength(2));
+    expect(
+      result.placements.every((placement) => !placement.start.isBefore(start)),
+      isTrue,
+    );
     expect(result.placements.single.start, start);
   });
 
@@ -117,7 +122,7 @@ void main() {
             id: 'late',
             title: 'En retard',
             durationMinutes: 90,
-            deadline: at(0, 15),
+            dueDate: at(0, 15),
           ),
           const PlanoTask(id: 'estimated', title: 'Durée inconnue'),
         ],
@@ -126,6 +131,10 @@ void main() {
       );
 
       expect(result.unplaced.map((task) => task.id), contains('late'));
+      expect(
+        result.unplacedReasons['late'],
+        'La deadline ne laisse pas assez de temps libre.',
+      );
       final estimated = result.placements.single;
       expect(estimated.task.id, 'estimated');
       expect(estimated.end.difference(estimated.start).inMinutes, 30);
@@ -139,7 +148,7 @@ void main() {
       durationMinutes: 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(1),
+      plannedEnd: at(1),
       isLocked: true,
     );
     final result = generatePlan(
@@ -158,6 +167,48 @@ void main() {
     expect(result.placements.single.task.id, 'new');
     expect(result.placements.single.start, at(1));
     expect(result.unplaced, isEmpty);
+    expect(locked.scheduledStart, at(0));
+    expect(locked.plannedEnd, at(1));
+    expect(locked.isLocked, isTrue);
+  });
+
+  test('explique les tâches plus longues que toute la journée', () {
+    const tooLong = PlanoTask(
+      id: 'too-long',
+      title: 'Tâche trop longue',
+      durationMinutes: 24 * 60 + 1,
+    );
+    final result = generatePlan(
+      tasks: [tooLong],
+      fixedEvents: [],
+      settings: settings(),
+    );
+
+    expect(result.unplaced, [tooLong]);
+    expect(
+      result.unplacedReasons,
+      {'too-long': 'Durée supérieure au temps libre disponible.'},
+    );
+  });
+
+  test('explique une journée sans aucune disponibilité', () {
+    final result = generatePlan(
+      tasks: const [PlanoTask(id: 'busy-day', title: 'Tâche sans créneau')],
+      fixedEvents: [
+        FixedEvent(
+          title: 'Journée occupée',
+          start: day,
+          end: DateTime(day.year, day.month, day.day + 1),
+        ),
+      ],
+      settings: settings(),
+    );
+
+    expect(result.placements, isEmpty);
+    expect(
+      result.unplacedReasons['busy-day'],
+      'Aucun créneau disponible dans cette journée.',
+    );
   });
 
   test('ne planifie pas après la fin de la journée', () {
@@ -166,7 +217,7 @@ void main() {
       title: 'Créneau du lendemain',
       status: TaskStatus.scheduled,
       scheduledStart: DateTime(day.year, day.month, day.day + 1, 10),
-      scheduledEnd: DateTime(day.year, day.month, day.day + 1, 11),
+      plannedEnd: DateTime(day.year, day.month, day.day + 1, 11),
       isLocked: true,
     );
     final result = generatePlan(
@@ -195,7 +246,7 @@ void main() {
       durationMinutes: 12 * 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(12),
+      plannedEnd: at(12),
       isLocked: true,
     );
     final result = generatePlan(
@@ -228,7 +279,7 @@ void main() {
       durationMinutes: 12 * 60,
       status: TaskStatus.scheduled,
       scheduledStart: at(0),
-      scheduledEnd: at(12),
+      plannedEnd: at(12),
       isLocked: true,
     );
     final result = generatePlan(
@@ -247,6 +298,72 @@ void main() {
     expect(result.placements.single.start, at(12, 10));
   });
 
+  test('la marge et la pause déjeuner ne s’appliquent que si activées', () {
+    final locked = PlanoTask(
+      id: 'locked-until-noon',
+      title: 'Tâche fixe',
+      durationMinutes: 12 * 60,
+      status: TaskStatus.scheduled,
+      scheduledStart: at(0),
+      plannedEnd: at(12),
+      isLocked: true,
+    );
+    const next = PlanoTask(
+      id: 'next',
+      title: 'Tâche suivante',
+      durationMinutes: 30,
+    );
+
+    final withoutOptions = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(),
+    );
+    final withLunch = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(lunch: true),
+    );
+    final withBuffer = generatePlan(
+      tasks: [locked, next],
+      fixedEvents: [],
+      settings: settings(bufferMinutes: 10),
+    );
+
+    expect(withoutOptions.placements.single.start, at(12));
+    expect(withLunch.placements.single.start, at(13, 30));
+    expect(withBuffer.placements.single.start, at(12, 10));
+  });
+
+  test('les placements générés ne se chevauchent pas', () {
+    final result = generatePlan(
+      tasks: [
+        const PlanoTask(id: 'a', title: 'A', durationMinutes: 75),
+        const PlanoTask(id: 'b', title: 'B', durationMinutes: 45),
+        const PlanoTask(id: 'c', title: 'C', durationMinutes: 60),
+      ],
+      fixedEvents: [
+        FixedEvent(title: 'Événement', start: at(10), end: at(11)),
+      ],
+      settings: settings(),
+    );
+
+    for (var i = 0; i < result.placements.length; i++) {
+      final current = result.placements[i];
+      expect(
+        current.start.isBefore(at(10)) || !current.start.isBefore(at(11)),
+        isTrue,
+      );
+      for (final other in result.placements.skip(i + 1)) {
+        expect(
+          current.end.isAfter(other.start) &&
+              other.end.isAfter(current.start),
+          isFalse,
+        );
+      }
+    }
+  });
+
   test(
     'détecte les chevauchements de tâches et autorise les créneaux adjacents',
     () {
@@ -255,21 +372,21 @@ void main() {
         title: 'Première tâche',
         status: TaskStatus.scheduled,
         scheduledStart: at(10),
-        scheduledEnd: at(11),
+        plannedEnd: at(11),
       );
       final overlapping = PlanoTask(
         id: 'overlap',
         title: 'Tâche simultanée',
         status: TaskStatus.scheduled,
         scheduledStart: at(10, 30),
-        scheduledEnd: at(11, 30),
+        plannedEnd: at(11, 30),
       );
       final adjacent = PlanoTask(
         id: 'adjacent',
         title: 'Tâche suivante',
         status: TaskStatus.scheduled,
         scheduledStart: at(11),
-        scheduledEnd: at(12),
+        plannedEnd: at(12),
       );
 
       expect(hasScheduleOverlap(first, [overlapping]), isTrue);
@@ -283,7 +400,7 @@ void main() {
       title: 'Tâche terminée',
       status: TaskStatus.scheduled,
       scheduledStart: at(9),
-      scheduledEnd: at(10),
+      plannedEnd: at(10),
     );
 
     expect(isTaskPast(task, at(9, 59)), isFalse);

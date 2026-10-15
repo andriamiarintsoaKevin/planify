@@ -11,14 +11,18 @@ class PlanoTask {
     this.notes = '',
     this.durationMinutes,
     this.priority = TaskPriority.medium,
-    this.deadline,
+    this.dueDate,
+    this.plannedEnd,
     this.status = TaskStatus.inbox,
     this.scheduledStart,
-    this.scheduledEnd,
     this.project = '',
     this.isLocked = false,
     this.isAiProposed = false,
     this.isDurationEstimated = false,
+    this.reminderEnabled = false,
+    this.createdAt,
+    this.updatedAt,
+    this.deletedAt,
   });
 
   final String id;
@@ -26,29 +30,37 @@ class PlanoTask {
   final String notes;
   final int? durationMinutes;
   final TaskPriority priority;
-  final DateTime? deadline;
+  final DateTime? dueDate;
+  final DateTime? plannedEnd;
   final TaskStatus status;
   final DateTime? scheduledStart;
-  final DateTime? scheduledEnd;
   final String project;
   final bool isLocked;
   final bool isAiProposed;
   final bool isDurationEstimated;
+  final bool reminderEnabled;
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
+  final DateTime? deletedAt;
 
   PlanoTask copyWith({
     String? title,
     String? notes,
     int? durationMinutes,
     TaskPriority? priority,
-    DateTime? deadline,
+    DateTime? dueDate,
+    DateTime? plannedEnd,
     TaskStatus? status,
     DateTime? scheduledStart,
-    DateTime? scheduledEnd,
     String? project,
     bool? isLocked,
     bool? isAiProposed,
     bool? isDurationEstimated,
-    bool clearDeadline = false,
+    bool? reminderEnabled,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    DateTime? deletedAt,
+    bool clearDueDate = false,
     bool clearSchedule = false,
   }) {
     return PlanoTask(
@@ -57,16 +69,20 @@ class PlanoTask {
       notes: notes ?? this.notes,
       durationMinutes: durationMinutes ?? this.durationMinutes,
       priority: priority ?? this.priority,
-      deadline: clearDeadline ? null : deadline ?? this.deadline,
+      dueDate: clearDueDate ? null : dueDate ?? this.dueDate,
+      plannedEnd: clearSchedule ? null : plannedEnd ?? this.plannedEnd,
       status: status ?? this.status,
       scheduledStart: clearSchedule
           ? null
           : scheduledStart ?? this.scheduledStart,
-      scheduledEnd: clearSchedule ? null : scheduledEnd ?? this.scheduledEnd,
       project: project ?? this.project,
       isLocked: isLocked ?? this.isLocked,
       isAiProposed: isAiProposed ?? this.isAiProposed,
       isDurationEstimated: isDurationEstimated ?? this.isDurationEstimated,
+      reminderEnabled: reminderEnabled ?? this.reminderEnabled,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      deletedAt: deletedAt ?? this.deletedAt,
     );
   }
 }
@@ -125,18 +141,11 @@ class PlanSettings {
   final bool prioritizeHighPriority;
 }
 
-DateTime? scheduledEndForTask({
+DateTime? plannedEndForTask({
   required DateTime? start,
-  required DateTime? deadline,
   required int? durationMinutes,
 }) {
   if (start == null) return null;
-  if (deadline != null) {
-    if (!deadline.isAfter(start)) {
-      throw ArgumentError.value(deadline, 'deadline', 'Must be after start');
-    }
-    return deadline;
-  }
   return start.add(Duration(minutes: durationMinutes ?? 30));
 }
 
@@ -170,8 +179,8 @@ PlanResult generatePlan({
     for (final task in tasks)
       if (task.isLocked &&
           task.scheduledStart != null &&
-          task.scheduledEnd != null)
-        _Interval(task.scheduledStart!, task.scheduledEnd!),
+          task.plannedEnd != null)
+        _Interval(task.scheduledStart!, task.plannedEnd!),
   ]..sort((a, b) => a.start.compareTo(b.start));
 
   final orderedTasks =
@@ -180,14 +189,14 @@ PlanResult generatePlan({
             (task) =>
                 !task.isLocked ||
                 task.scheduledStart == null ||
-                task.scheduledEnd == null,
+                task.plannedEnd == null,
           )
           .toList()
         ..sort((a, b) {
-          final aDeadline = a.deadline ?? DateTime(9999);
-          final bDeadline = b.deadline ?? DateTime(9999);
-          final deadlineOrder = aDeadline.compareTo(bDeadline);
-          if (deadlineOrder != 0) return deadlineOrder;
+          final aDueDate = a.dueDate ?? DateTime(9999);
+          final bDueDate = b.dueDate ?? DateTime(9999);
+          final dueDateOrder = aDueDate.compareTo(bDueDate);
+          if (dueDateOrder != 0) return dueDateOrder;
           if (settings.prioritizeHighPriority) {
             final priorityOrder = b.priority.index.compareTo(a.priority.index);
             if (priorityOrder != 0) return priorityOrder;
@@ -212,7 +221,7 @@ PlanResult generatePlan({
       final candidateStart = slot.start;
       final candidateEnd = candidateStart.add(Duration(minutes: duration));
       if (candidateEnd.isAfter(slot.end)) continue;
-      if (task.deadline != null && candidateEnd.isAfter(task.deadline!)) {
+      if (task.dueDate != null && candidateEnd.isAfter(task.dueDate!)) {
         continue;
       }
       final placement = TaskPlacement(
@@ -253,10 +262,7 @@ List<_Interval> _freeIntervals(
     if (!interval.end.isAfter(cursor)) continue;
     if (interval.start.isAfter(cursor)) {
       free.add(
-        _Interval(
-          cursor,
-          interval.start.isBefore(end) ? interval.start : end,
-        ),
+        _Interval(cursor, interval.start.isBefore(end) ? interval.start : end),
       );
     }
     final bufferedEnd = interval.end.add(Duration(minutes: bufferMinutes));
@@ -274,10 +280,10 @@ List<String> _makeExplanations(
   if (placements.isEmpty) return [];
   final explanations = <String>[];
   for (final placement in placements) {
-    final deadline = placement.task.deadline;
-    if (deadline != null && deadline.difference(placement.end).inMinutes >= 0) {
+    final dueDate = placement.task.dueDate;
+    if (dueDate != null && dueDate.difference(placement.end).inMinutes >= 0) {
       explanations.add(
-        '${placement.task.title} est planifiée avant sa deadline de ${_formatTime(deadline)}.',
+        '${placement.task.title} est planifiée avant sa deadline de ${_formatTime(dueDate)}.',
       );
     }
     if (prioritizeHighPriority &&
@@ -294,7 +300,7 @@ List<String> _makeExplanations(
   }
   const fallbackExplanations = [
     'Chaque tâche utilise un créneau disponible suffisamment long.',
-    'Les deadlines ont été prises en compte pour ordonner les tâches.',
+    'Les dates limites ont été prises en compte pour ordonner les tâches.',
     'Aucune tâche proposée ne dépasse sa deadline.',
   ];
   for (final explanation in fallbackExplanations) {
@@ -306,7 +312,7 @@ List<String> _makeExplanations(
 
 bool hasScheduleOverlap(PlanoTask task, Iterable<PlanoTask> otherTasks) {
   final start = task.scheduledStart;
-  final end = task.scheduledEnd;
+  final end = task.plannedEnd;
   if (task.status != TaskStatus.scheduled || start == null || end == null) {
     return false;
   }
@@ -315,7 +321,7 @@ bool hasScheduleOverlap(PlanoTask task, Iterable<PlanoTask> otherTasks) {
       return false;
     }
     final otherStart = other.scheduledStart;
-    final otherEnd = other.scheduledEnd;
+    final otherEnd = other.plannedEnd;
     return otherStart != null &&
         otherEnd != null &&
         start.isBefore(otherEnd) &&
@@ -325,12 +331,12 @@ bool hasScheduleOverlap(PlanoTask task, Iterable<PlanoTask> otherTasks) {
 
 bool isTaskPast(PlanoTask task, DateTime now) =>
     task.status == TaskStatus.scheduled &&
-    task.scheduledEnd != null &&
-    !task.scheduledEnd!.isAfter(now);
+    task.plannedEnd != null &&
+    !task.plannedEnd!.isAfter(now);
 
 bool taskOverlapsDay(PlanoTask task, DateTime day) {
   final start = task.scheduledStart;
-  final end = task.scheduledEnd;
+  final end = task.plannedEnd;
   if (task.status != TaskStatus.scheduled || start == null || end == null) {
     return false;
   }
@@ -346,7 +352,7 @@ DateTime taskVisibleStartOnDay(PlanoTask task, DateTime day) {
 }
 
 DateTime taskVisibleEndOnDay(PlanoTask task, DateTime day) {
-  final end = task.scheduledEnd!;
+  final end = task.plannedEnd!;
   final dayEnd = DateTime(day.year, day.month, day.day + 1);
   return end.isAfter(dayEnd) ? dayEnd : end;
 }

@@ -1,95 +1,235 @@
-PLANIFY — INSTRUCTIONS DE TEST MANUEL
-======================================
+PLANIFY — PARCOURS DE TEST MANUEL
+=================================
 
 OBJECTIF
 --------
-Vérifier les parcours principaux et la conservation locale des données.
+Vérifier les parcours locaux, l'installation Android, l'authentification
+facultative, la file hors ligne et la synchronisation Supabase. Noter pour
+chaque test PASSÉ, ÉCHOUÉ ou NON EXÉCUTÉ ; ne pas confondre les tests
+automatisés avec le test réel sur un ou deux appareils.
 
-AVANT DE COMMENCER
-------------------
-1. Depuis la racine du projet, exécuter : flutter pub get
-2. Démarrer l’application : flutter run
-3. Au premier lancement, vérifier qu’aucune tâche ou aucun rendez-vous fictif
-   n’apparaît. Les tâches et réglages saisis seront enregistrés localement.
+0. PRÉPARER L'ENVIRONNEMENT
+--------------------------
+Configuration Android
+1. Connecter le téléphone, activer le débogage USB et accepter la demande
+   d'autorisation Android.
+2. Depuis la racine du projet, vérifier l'appareil avec :
+       flutter devices
+       adb devices
+3. APK release de test déjà générés dans
+   build/app/outputs/flutter-apk/ :
+   - app-armeabi-v7a-release.apk : téléphone de test actuel (ABI vérifiée),
+     environ 20,2 Mo ;
+   - app-arm64-v8a-release.apk : appareils ARM 64 bits, environ 22,6 Mo ;
+   - app-x86_64-release.apk : appareils x86_64, environ 24,1 Mo.
+   Vérifier l'ABI avant de choisir :
+       adb shell getprop ro.product.cpu.abi
+4. Installer l'APK correspondant. Pour le téléphone armeabi-v7a :
+       adb install -r build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+   Ouvrir Planify depuis le téléphone. Si ADB ne détecte pas l'appareil,
+   vérifier le câble, le débogage USB et la confirmation à l'écran.
+5. Pour reconstruire ces APK avec la configuration Supabase de développement :
+       flutter build apk --release --split-per-abi \
+         --dart-define-from-file=env.dev.json
+   Le fichier env.dev.json est local et ignoré par Git. Ne pas le copier ni
+   partager ses valeurs. Ces APK sont signés par la clé debug du projet :
+   ils servent aux essais, pas à une publication de production.
+   Pour construire seulement l'APK ARM 32 bits :
+       flutter build apk --release --target-platform android-arm \
+         --split-per-abi --dart-define-from-file=env.dev.json
+6. Si un APK affiche « Connexion réseau impossible » pendant la création du
+   compte, vérifier d'abord que l'APK a été reconstruit après l'ajout de la
+   permission Android INTERNET, que le téléphone a accès à Internet et que
+   env.dev.json a servi au build. Un APK déjà installé ne reçoit pas les
+   changements du dépôt : reconstruire puis réinstaller.
 
-1. VÉRIFIER LE DÉMARRAGE VIDE
-----------------------------
-1. Ouvrir « Inbox ».
-2. Vérifier le compteur « 0 à planifier » et le message « Votre Inbox est vide ».
-3. Ouvrir « Calendrier ».
-4. Vérifier « Aucun élément prévu » et l’absence de rendez-vous « Point client ».
-5. Ouvrir « Réglages » puis « Comprendre Planify ».
-6. Vérifier que le guide indique que les données restent locales et ne sont
-   pas synchronisées entre appareils.
+Configuration Supabase (nécessaire seulement pour les tests cloud)
+1. Utiliser uniquement le projet Supabase de développement et des comptes de
+   test confirmés, sans données personnelles.
+2. Dans le SQL Editor, appliquer dans l'ordre :
+   - supabase/migrations/20261015170000_create_tasks_with_rls.sql
+   - supabase/migrations/20261015180000_enforce_task_sync_conflicts.sql
+3. Créer deux comptes de test A et B dans Authentication > Users, puis les
+   confirmer si la confirmation d'e-mail est activée.
+4. Lancer le test RLS :
+       python3 scripts/test_supabase_rls.py
+   Saisir les deux comptes quand le script le demande. Succès attendu : toutes
+   les lignes affichent PASS et la dernière indique « RLS isolation checks
+   completed. ». Le test est destructif uniquement pour la tâche temporaire
+   qu'il crée et supprime lui-même. Ne jamais utiliser de compte privilégié.
 
-2. AJOUTER UNE TÂCHE RAPIDEMENT
--------------------------------
-1. Retourner dans « Inbox ».
-2. Saisir « Préparer une présentation » dans le champ de capture rapide.
-3. Appuyer sur le bouton d’ajout du champ.
-4. Vérifier que la tâche apparaît dans l’Inbox et que le compteur vaut 1.
+1. DÉMARRAGE ET MODE LOCAL
+-------------------------
+1. Installer/lancer sans définitions Supabase (ou avec env.example.json dont
+   les valeurs sont vides). Vérifier que l'application démarre sans erreur.
+2. Dans Réglages > Synchronisation, vérifier « Local uniquement ·
+   configuration absente ».
+3. Vérifier qu'aucune tâche ou aucun rendez-vous fictif ne s'affiche.
+4. Ouvrir Inbox : « 0 à planifier » et « Votre Inbox est vide ».
+5. Ouvrir Calendrier : « Aucun élément prévu », sans rendez-vous « Point
+   client ».
+6. Ouvrir Réglages > Comprendre Planify et vérifier que le guide décrit le
+   stockage local et les fonctions disponibles.
 
-3. MODIFIER ET SUPPRIMER UNE TÂCHE
-----------------------------------
-1. Toucher la tâche créée pour ouvrir son formulaire.
-2. Choisir « Planifier le » puis sélectionner une date et une heure.
-3. Ajouter un projet facultatif, par exemple « Projet personnel ».
-4. Modifier sa deadline, sa priorité et ses notes, puis enregistrer.
-5. Vérifier que la tâche apparaît au créneau choisi.
-6. Rouvrir la tâche, choisir « Supprimer » et confirmer le retour à une Inbox
-   vide.
-7. Créer deux tâches qui se chevauchent et vérifier l’avertissement rouge.
-8. Vérifier qu’un créneau déjà passé est grisé et ne peut plus être ouvert ni
-   supprimé.
+2. TÂCHES, DATES ET RAPPELS
+--------------------------
+1. Dans Inbox, saisir « Préparer une présentation » avec la capture rapide ;
+   vérifier que la tâche apparaît et que le compteur vaut 1.
+2. Ouvrir sa fiche, puis Modifier. Choisir une durée, une priorité, des notes
+   et un projet ; planifier à une date/heure future.
+3. Vérifier que la fin planifiée découle de l'heure de début et de la durée.
+   Dans le modèle, la date limite (due date) est distincte et facultative ;
+   elle ne définit pas la fin calculée du créneau. Le formulaire actuel ne
+   permet pas de saisir une date limite : tester son édition dans l'interface
+   est donc NON DISPONIBLE.
+4. Enregistrer puis vérifier les valeurs dans la fiche, Inbox/Aujourd'hui et
+   Calendrier.
+5. Si les rappels sont testés, choisir une heure future proche, activer le
+   rappel et accorder les autorisations Android demandées (notifications et,
+   si proposé, alarmes exactes). Vérifier l'arrivée du rappel. Si l'autorisation
+   est refusée, le message doit proposer les Réglages système.
+6. Créer deux tâches sur des créneaux qui se chevauchent : le chevauchement
+   est autorisé mais signalé en rouge.
+7. Vérifier qu'une tâche terminée/passée ne peut plus être modifiée ou
+   supprimée conformément au parcours actuel.
+8. Déplacer une tâche non verrouillée par glisser-déposer : l'heure et la fin
+   changent, la durée reste identique. Une tâche verrouillée ne se déplace pas.
+9. Supprimer une tâche depuis son formulaire et vérifier qu'elle disparaît des
+   vues. Elle est supprimée logiquement (tombstone), pas effacée immédiatement
+   de la base.
 
-4. PRÉVISUALISER ET VALIDER UN PLAN
------------------------------------
-1. Créer une tâche dans l’Inbox sans lui attribuer d’horaire.
-2. Dans l’Inbox, choisir « Planifier automatiquement ».
-3. Générer le plan et vérifier que l’écran d’aperçu affiche la tâche et un
-   créneau futur.
-4. Valider le plan.
-5. Vérifier que la tâche apparaît dans « Aujourd’hui » et dans « Calendrier ».
-6. Utiliser « Annuler » si l’action est proposée et vérifier que la tâche
-   retourne dans l’Inbox.
-7. Vérifier que les horaires déjà fixés restent inchangés et que les créneaux
-   passés ne sont pas proposés.
+3. PLANIFICATION ET RÉGLAGES
+---------------------------
+1. Créer une tâche sans horaire et choisir « Planifier automatiquement ».
+2. Vérifier l'aperçu, les tâches non placées éventuelles et les créneaux
+   futurs ; valider puis vérifier Aujourd'hui et Calendrier.
+3. Si « Annuler » est proposé, annuler la dernière validation et vérifier le
+   retour dans Inbox. Les horaires déjà fixés doivent rester inchangés.
+4. Vérifier pause déjeuner, marge et priorité haute : désactivées par défaut,
+   puis tester une règle à la fois.
+5. Basculer le thème sombre ; vérifier lisibilité des champs, panneaux, textes
+   et priorités. Vérifier les couleurs basse, normale et haute.
+6. Sur Android/iOS, si un calendrier système est disponible, le connecter en
+   lecture seule. Vérifier ses événements comme créneaux fixes, puis
+   déconnecter. Planify ne doit pas créer/modifier les événements du calendrier.
 
-5. TESTER UNE DEADLINE ET LES RÉGLAGES
---------------------------------------
-1. Créer ou modifier une tâche et lui attribuer une deadline future.
-2. Générer un plan et vérifier que l’horaire proposé tient compte de l’échéance.
-3. Pour une tâche planifiée le 11/10/2026 à 16:00 avec une deadline le
-   12/10/2026 à 06:30, vérifier que le créneau se termine à 06:30.
-4. Vérifier que pause déjeuner, marge et priorité haute sont désactivées par
-   défaut.
-5. Générer un plan en laissant ces règles désactivées : elles ne doivent pas
-   modifier les créneaux.
-6. Recommencer en activant une règle et vérifier que seule cette règle est
-   appliquée.
-7. Activer puis désactiver le thème sombre.
-8. En thème sombre, ouvrir le formulaire et vérifier que les champs, panneaux
-   et textes restent lisibles, sans fond blanc.
-9. Vérifier les couleurs distinctes des priorités basse, normale et haute dans
-   l’Inbox, le planning, le calendrier et l’aperçu.
+4. PERSISTANCE LOCALE ET MODE HORS LIGNE
+----------------------------------------
+1. Enregistrer une tâche avec notes, projet, priorité, durée et rappel, et
+   modifier le thème.
+2. Fermer complètement et relancer l'application. Vérifier que tâches et
+   réglages sont conservés.
+3. Supprimer la tâche, relancer l'application et vérifier qu'elle ne réapparaît
+   pas.
+4. Sans compte ou en mode avion, créer/modifier/supprimer une tâche. Les
+   parcours locaux doivent continuer à fonctionner.
 
-6. VÉRIFIER LA DURÉE DES DONNÉES
---------------------------------
-1. Ajouter une tâche et remplir plusieurs champs : notes, projet, priorité et
-   deadline.
-2. Enregistrer la tâche et modifier le thème.
-3. Fermer complètement puis relancer l’application.
-4. Vérifier que la tâche, tous ses champs et les réglages sont conservés.
-5. Supprimer la tâche, fermer puis relancer l’application et vérifier que la
-   tâche supprimée ne réapparaît pas.
+5. AUTHENTIFICATION (configuration Supabase requise)
+---------------------------------------------------
+1. Lancer la version configurée avec env.dev.json, sans afficher ni partager
+   ce fichier :
+       flutter run -d <device-id> --dart-define-from-file=env.dev.json
+   Pour installer un APK release configuré, reconstruire selon la section 0.
+2. Dans Réglages > Mon espace, choisir « Plus tard » : l'application doit
+   rester utilisable localement.
+3. Essayer une adresse ou un mot de passe incorrect : un message clair doit
+   apparaître, sans exposer le mot de passe ni le contenu des tâches.
+4. Se connecter avec le compte de test A. Vérifier le compte affiché dans
+   Mon espace et l'état de synchronisation.
+5. Fermer puis relancer l'application : la session doit être persistante.
+6. Se déconnecter depuis Mon espace. La session doit être fermée ; les données
+   locales restent visibles et utilisables.
+7. Tester l'inscription uniquement si nécessaire, avec un compte de test :
+   vérifier le message de confirmation e-mail si Supabase l'exige.
 
-LIMITES CONNUES
----------------
-- Les données SQLite restent sur l’appareil et ne sont pas synchronisées entre
-  appareils.
-- L’adaptateur SQLite est disponible sur Android, iOS, macOS, Windows et Linux,
-  mais pas dans la version Web.
-- Aucun compte, serveur, calendrier externe, notification ou abonnement n’est
-  connecté.
-- La synchronisation cloud et la persistance entre appareils ne sont pas
-  disponibles.
+6. SYNCHRONISATION SUR UN APPAREIL
+---------------------------------
+À effectuer avec migrations appliquées, réseau disponible et compte A connecté.
+Dans Réglages, le statut doit présenter À jour, En attente, Erreur ou Hors ligne.
+
+1. Création et reconnexion : activer le mode avion, créer une tâche avec un
+   titre reconnaissable (« sync-offline-<date> »), vérifier que la tâche reste
+   disponible localement. Couper le mode avion. Appuyer sur Actualiser si
+   nécessaire et attendre « À jour ». La tâche ne doit apparaître qu'une fois.
+2. Modification : modifier le titre sur l'appareil A, actualiser et vérifier
+   que la modification a été envoyée.
+3. Double envoi : appuyer plusieurs fois sur Actualiser et relancer
+   l'application. La tâche distante doit conserver le même UUID et ne pas être
+   dupliquée.
+4. Suppression : supprimer logiquement une tâche, attendre « À jour », puis
+   actualiser. Elle doit rester absente des vues ; un ancien envoi actif ne
+   doit pas la ressusciter.
+5. Perte de réseau : couper le réseau pendant une synchronisation ou juste
+   avant Actualiser. Vérifier que les données restent locales et que la file
+   n'est pas acquittée à tort. Rétablir le réseau et vérifier la reprise.
+6. Erreur durable : si le projet de test permet de provoquer une erreur
+   temporaire répétée, laisser les tentatives arriver à leur limite. Vérifier
+   l'état Erreur puis Réessayer. Ne pas provoquer cette condition sur des
+   données réelles.
+
+7. SYNCHRONISATION ENTRE DEUX APPAREILS (test manuel requis)
+----------------------------------------------------------
+Préparer deux appareils A et B avec la même version configurée, réseau actif et
+le même compte de test. Appliquer les deux migrations Supabase avant le test.
+
+1. Sur A, créer une tâche hors ligne ; reconnecter A et attendre À jour.
+2. Sur B, appuyer sur Actualiser. Vérifier l'apparition de la tâche avec ses
+   champs et sans doublon.
+3. Modifier la même tâche successivement sur A puis B en laissant quelques
+   secondes entre les éditions et en laissant chaque appareil synchroniser.
+   Actualiser les deux : la version dont `updated_at` est le plus récent doit
+   gagner. En cas de doute, comparer les horodatages stockés sur Supabase.
+4. Sur A, supprimer la tâche, synchroniser puis actualiser B. Vérifier que la
+   suppression prévaut sur une modification active plus ancienne.
+5. Consigner les appareils, versions d'APK, heure et résultat de chaque étape.
+
+8. TEST RLS A/B ET CLIENT NON CONNECTÉ
+-------------------------------------
+Exécuter le script de la section 0 avec deux comptes de test distincts. La
+sortie doit confirmer que A peut créer/lire sa tâche, que B ne peut pas la lire,
+la modifier ou la supprimer, qu'un client non connecté n'y accède pas et que
+la tâche de A reste inchangée. Si le script échoue, ne pas considérer la
+sécurité Supabase comme validée.
+
+RÉSULTATS À CONSIGNER
+--------------------
+- Appareil(s), version Android, ABI, APK installé et version Planify :
+- Mode/configuration : local sans compte / Supabase :
+- Migrations SQL appliquées (noms et date) :
+- Tests exécutés et statut PASSÉ / ÉCHOUÉ / NON EXÉCUTÉ :
+- Sortie du script RLS (ne pas inclure mots de passe, jetons ou clés) :
+- Problèmes observés et étapes pour les reproduire :
+
+MISES À JOUR / VALIDATIONS ENCORE À FAIRE
+-----------------------------------------
+- Non validé ici : installation effective de l'APK sur le téléphone. La
+  génération des trois APK release a réussi ; la tentative d'installation
+  précédente a échoué car ADB ne détectait plus l'appareil. Refaire la section 0.
+- Si le message « Connexion réseau impossible » apparaît encore avec le nouvel
+  APK, relever le texte exact et vérifier que l'URL du projet Supabase est
+  joignable depuis le navigateur du téléphone, que le projet est actif et que
+  la clé anon publique de développement est correctement renseignée dans le
+  fichier local utilisé lors du build. Ne jamais transmettre cette clé dans un
+  rapport public.
+- À exécuter : appliquer les migrations sur le vrai projet de développement
+  puis exécuter le script RLS avec deux comptes de test ; le test RLS direct
+  n'a pas encore été exécuté.
+- À exécuter : parcours réel de synchronisation entre deux appareils ; les tests
+  automatisés actuels utilisent un serveur distant simulé.
+- Avant distribution publique : remplacer l'identifiant Android
+  `com.example.planify`, configurer une clé de signature release protégée,
+  définir la procédure de sauvegarde de cette clé et tester les mises à jour
+  signées avec la même clé. Les APK actuels sont signés en debug.
+- Limitation à traiter avant partage de plusieurs comptes sur un même appareil :
+  la base SQLite et sa file de synchronisation sont locales et non séparées par
+  utilisateur. Ne pas se déconnecter d'un compte pour connecter un autre compte
+  avec des tâches locales en attente : celles-ci pourraient être envoyées sous
+  le compte actif. Il faut implémenter une isolation locale/par compte avant
+  de supporter ce scénario.
+- Le statut « Hors ligne » inclut aussi l'absence de session : la synchronisation
+  cloud exige une configuration, un compte connecté et l'accès réseau.
+- L'édition de la date limite (`dueDate`) n'est pas proposée dans le formulaire
+  actuel ; ajouter un sélecteur et son test UI si cette fonction doit être
+  accessible à l'utilisateur.
+- Ne pas déclarer la phase de synchronisation validée tant que les tests
+  deux-appareils et RLS ne sont pas passés sur le projet/appareils réels.

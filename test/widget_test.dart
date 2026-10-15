@@ -5,6 +5,30 @@ import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
 
 void main() {
+  testWidgets('affiche les notifications en haut avec une progression', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter').last);
+    await tester.pump();
+
+    expect(find.text('Saisissez un titre pour la tâche'), findsOneWidget);
+    final progressFinder = find.byType(LinearProgressIndicator);
+    expect(progressFinder, findsOneWidget);
+    final initialProgress = tester.widget<LinearProgressIndicator>(
+      progressFinder,
+    );
+    expect(initialProgress.value, greaterThan(0));
+
+    await tester.pump(const Duration(seconds: 3));
+    expect(find.text('Saisissez un titre pour la tâche'), findsNothing);
+    expect(progressFinder, findsNothing);
+  });
+
   testWidgets('démarre proprement avec une Inbox vide', (
     WidgetTester tester,
   ) async {
@@ -30,23 +54,41 @@ void main() {
   testWidgets('permet de prévisualiser puis valider un plan', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    final repository = InMemoryPlanifyRepository();
+    await repository.saveTasks([
+      PlanoTask(
+        id: 'plan-preview',
+        title: 'Préparer le test Planify',
+        durationMinutes: 30,
+      ),
+      const PlanoTask(
+        id: 'plan-too-long',
+        title: 'Tâche trop longue',
+        durationMinutes: 25 * 60,
+      ),
+    ]);
+    await tester.pumpWidget(PlanoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Choisir une date'));
+    await tester.pumpAndSettle();
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
+    await tester.tap(find.text('${tomorrow.day}').last);
+    await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Inbox').last);
     await tester.pumpAndSettle();
-
-    await tester.enterText(
-      find.byType(TextField).first,
-      'Préparer le test Planify',
-    );
-    await tester.tap(find.byTooltip('Ajouter'));
+    tester
+        .state<ScaffoldMessengerState>(find.byType(ScaffoldMessenger))
+        .hideCurrentSnackBar();
     await tester.pumpAndSettle();
+
     expect(find.text('Préparer le test Planify'), findsOneWidget);
 
-    await tester.testTextInput.receiveAction(TextInputAction.done);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Planifier automatiquement la tâche'));
+    const planButtonLabel = 'Planifier automatiquement les 2 tâches';
+    await tester.ensureVisible(find.text(planButtonLabel));
+    await tester.tap(find.text(planButtonLabel));
     await tester.pumpAndSettle();
 
     expect(find.text('Préparer le plan'), findsOneWidget);
@@ -61,21 +103,14 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Plan proposé'), findsOneWidget);
-    final scheduleText = tester
-        .widgetList<Text>(find.byType(Text))
-        .map((text) => text.data)
-        .whereType<String>()
-        .firstWhere(
-          (text) => RegExp(r'^\d{2}:\d{2}–\d{2}:\d{2}').hasMatch(text),
-        );
-    final startClock = scheduleText.split('–').first.split(':');
-    final scheduledMinutes =
-        int.parse(startClock[0]) * 60 + int.parse(startClock[1]);
-    final now = DateTime.now();
-    expect(scheduledMinutes, greaterThanOrEqualTo(now.hour * 60 + now.minute));
-    expect(find.text('Tout est dans les temps'), findsOneWidget);
+    expect(find.text('Tâche trop longue'), findsOneWidget);
+    expect(
+      find.text('Durée supérieure au temps libre disponible.'),
+      findsOneWidget,
+    );
     await tester.drag(find.byType(ListView).last, const Offset(0, -700));
     await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Modifier'));
     await tester.tap(find.text('Modifier'));
     await tester.pumpAndSettle();
     expect(find.text('Préparer le plan'), findsOneWidget);
@@ -89,32 +124,120 @@ void main() {
     await tester.tap(find.text('Valider le plan'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Planning modifié'), findsOneWidget);
     expect(find.text('Votre planning'), findsOneWidget);
+    expect(find.text('Annuler'), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+
+    final restoredTasks = await repository.loadTasks();
+    final restoredTask = restoredTasks.singleWhere(
+      (task) => task.id == 'plan-preview',
+    );
+    final stillUnplaced = restoredTasks.singleWhere(
+      (task) => task.id == 'plan-too-long',
+    );
+    expect(restoredTask.status, TaskStatus.inbox);
+    expect(restoredTask.scheduledStart, isNull);
+    expect(restoredTask.plannedEnd, isNull);
+    expect(stillUnplaced.status, TaskStatus.inbox);
   });
 
-  testWidgets('masque le champ de durée à la création et à la modification', (
+  testWidgets(
+    'la fiche est en lecture seule et le formulaire limite la durée',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        PlanoApp(repository: InMemoryPlanifyRepository()),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(FloatingActionButton));
+      await tester.pumpAndSettle();
+      expect(find.text('Durée estimée'), findsOneWidget);
+      expect(
+        find.text(
+          'De 15 min à 4 h. Une durée en heures peut être décimale, par exemple 1,5 h.',
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('Deadline'), findsNothing);
+
+      await tester.enterText(find.byType(TextField).first, 'Tâche sans durée');
+      await tester.tap(find.text('Ajouter').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Inbox').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Tâche sans durée'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Durée estimée'), findsNothing);
+      await tester.tap(find.text('Modifier la tâche'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Modifier la tâche'), findsOneWidget);
+      expect(find.text('Durée estimée'), findsOneWidget);
+      expect(find.text('Deadline'), findsNothing);
+    },
+  );
+
+  testWidgets('convertit une durée saisie en heures en minutes', (
     WidgetTester tester,
   ) async {
-    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    final repository = InMemoryPlanifyRepository();
+    await tester.pumpWidget(PlanoApp(repository: repository));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
-    expect(find.text('Durée estimée'), findsNothing);
-    expect(find.text('Sans durée'), findsNothing);
 
-    await tester.enterText(find.byType(TextField).first, 'Tâche sans durée');
+    final durationField = find.byKey(const ValueKey('task-duration-input'));
+    await tester.enterText(
+      find.descendant(of: durationField, matching: find.byType(TextField)),
+      '90',
+    );
+    await tester.tap(find.text('Heures'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: durationField,
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      '1,5',
+    );
+    await tester.tap(find.text('Minutes'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: durationField,
+              matching: find.byType(TextField),
+            ),
+          )
+          .controller!
+          .text,
+      '90',
+    );
+
+    await tester.tap(find.text('Heures'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.descendant(of: durationField, matching: find.byType(TextField)),
+      '2',
+    );
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Tâche de deux heures',
+    );
     await tester.tap(find.text('Ajouter').last);
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Inbox').last);
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Tâche sans durée'));
-    await tester.pumpAndSettle();
 
-    expect(find.text('Modifier la tâche'), findsOneWidget);
-    expect(find.text('Durée estimée'), findsNothing);
-    expect(find.text('Sans durée'), findsNothing);
+    final savedTask = (await repository.loadTasks()).single;
+    expect(savedTask.durationMinutes, 120);
   });
 
   testWidgets('les champs du formulaire s’adaptent au thème sombre', (
@@ -142,12 +265,75 @@ void main() {
       Theme.of(tester.element(find.text('Nouvelle tâche'))).brightness,
       Brightness.dark,
     );
-    final darkScheme = Theme.of(
-      tester.element(find.text('Nouvelle tâche')),
-    ).colorScheme;
+    expect(
+      tester
+          .widget<TextField>(
+            find.descendant(
+              of: find.byKey(const ValueKey('task-duration-input')),
+              matching: find.byType(TextField),
+            ),
+          )
+          .keyboardType,
+      TextInputType.number,
+    );
+    final darkScheme = Theme.of(tester.element(find.text('Nouvelle tâche')))
+        .colorScheme;
     expect(darkScheme.onSurface, const Color(0xFFF4F5F7));
     expect(darkScheme.onSurfaceVariant, const Color(0xFFC0C6D2));
   });
+
+  testWidgets(
+    'la pause déjeuner est réglable et la feuille suit le thème sombre',
+    (WidgetTester tester) async {
+      final repository = InMemoryPlanifyRepository();
+      await repository.saveTasks([
+        for (var index = 0; index < 4; index++)
+          PlanoTask(
+            id: 'long-$index',
+            title: 'Tâche longue $index',
+            durationMinutes: 240,
+          ),
+      ]);
+      await tester.pumpWidget(PlanoApp(repository: repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Choisir une date'));
+      await tester.pumpAndSettle();
+      final tomorrow = DateTime.now().add(const Duration(days: 1));
+      await tester.tap(find.text('${tomorrow.day}').last);
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Réglages').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Apparence sombre'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Inbox').last);
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(
+        find.text('Planifier automatiquement les 4 tâches'),
+      );
+      await tester.tap(find.text('Planifier automatiquement les 4 tâches'));
+      await tester.pumpAndSettle();
+
+      expect(
+        Theme.of(tester.element(find.text('Préparer le plan'))).brightness,
+        Brightness.dark,
+      );
+      await tester.tap(find.text('Réserver une pause déjeuner'));
+      await tester.pumpAndSettle();
+      final fortyMinuteChip = find.widgetWithText(ChoiceChip, '40 min');
+      expect(fortyMinuteChip, findsOneWidget);
+      await tester.tap(fortyMinuteChip);
+      await tester.pumpAndSettle();
+      expect(tester.widget<ChoiceChip>(fortyMinuteChip).selected, isTrue);
+
+      await tester.ensureVisible(find.text('Générer le plan'));
+      await tester.tap(find.text('Générer le plan'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('13:10–17:10'), findsOneWidget);
+    },
+  );
 
   testWidgets('différencie visuellement les trois priorités dans l’Inbox', (
     WidgetTester tester,
@@ -222,6 +408,8 @@ void main() {
 
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
+    await tester.drag(find.byType(ListView).last, const Offset(0, -350));
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Choisir une date et une heure'));
     await tester.tap(find.text('Choisir une date et une heure'));
     await tester.pumpAndSettle();
@@ -248,14 +436,14 @@ void main() {
         title: 'Tâche A',
         status: TaskStatus.scheduled,
         scheduledStart: start,
-        scheduledEnd: end,
+        plannedEnd: end,
       ),
       PlanoTask(
         id: 'overlap-b',
         title: 'Tâche B',
         status: TaskStatus.scheduled,
         scheduledStart: start,
-        scheduledEnd: end,
+        plannedEnd: end,
       ),
     ]);
     await tester.pumpWidget(PlanoApp(repository: repository));

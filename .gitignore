@@ -46,6 +46,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
-AGENT.md
+
+*.txt
 env.dev.json
-TEST_MANUEL_PLANIFY.txt
+AGENT.md
