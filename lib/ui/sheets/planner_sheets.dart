@@ -287,7 +287,10 @@ class _PlanPreviewPageState extends State<_PlanPreviewPage> {
                         dense: true,
                         contentPadding: EdgeInsets.zero,
                         title: Text(task.title),
-                        subtitle: const Text('Garder dans l’Inbox'),
+                        subtitle: Text(
+                          widget.result.unplacedReasons[task.id] ??
+                              'Garder dans l’Inbox',
+                        ),
                         trailing: const Icon(Icons.inbox_outlined),
                       ),
                     ),
