@@ -2,9 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:planify/data/auth_repository.dart';
 import 'package:planify/data/in_memory_planify_repository.dart';
 import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   testWidgets('affiche les notifications en haut avec une progression', (
@@ -94,6 +96,69 @@ void main() {
     expect(settings['calendarId'], 'calendar-123');
     expect(settings['aiGeminiConsentGranted'], isFalse);
     expect(find.text('Copier le JSON'), findsOneWidget);
+  });
+
+  testWidgets(
+    'confirme la suppression serveur avant de proposer la conservation locale',
+    (WidgetTester tester) async {
+      final events = <String>[];
+      final repository = _TrackingPlanifyRepository(events);
+      await repository.saveTasks(const [
+        PlanoTask(id: 'local-task', title: 'Tâche conservée'),
+      ]);
+      final authRepository = _FakeAuthRepository(events);
+      await tester.pumpWidget(
+        PlanoApp(repository: repository, authRepository: authRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await _openAccountDeletion(tester);
+      expect(find.text('Supprimer définitivement le compte ?'), findsOneWidget);
+      expect(events, isEmpty);
+
+      await tester.tap(find.text('Supprimer définitivement'));
+      await tester.pumpAndSettle();
+      expect(events, ['delete-account']);
+      expect(authRepository.currentUser, isNull);
+      expect(find.text('Que faire des données locales ?'), findsOneWidget);
+
+      await tester.tap(find.text('Garder localement'));
+      await tester.pumpAndSettle();
+
+      expect(events, ['delete-account', 'clear-local-keep']);
+      expect((await repository.loadTasks()).single.id, 'local-task');
+      expect(
+        find.text('Aucun compte connecté · données locales'),
+        findsOneWidget,
+      );
+    },
+  );
+
+  testWidgets('efface les tâches locales après le choix post-suppression', (
+    WidgetTester tester,
+  ) async {
+    final events = <String>[];
+    final repository = _TrackingPlanifyRepository(events);
+    await repository.saveTasks(const [
+      PlanoTask(id: 'local-task', title: 'Tâche à effacer'),
+    ]);
+    final authRepository = _FakeAuthRepository(events);
+    await tester.pumpWidget(
+      PlanoApp(repository: repository, authRepository: authRepository),
+    );
+    await tester.pumpAndSettle();
+
+    await _openAccountDeletion(tester);
+    await tester.tap(find.text('Supprimer définitivement'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Tout effacer'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Tout effacer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Que faire des données locales ?'), findsNothing);
+    expect(events, ['delete-account', 'clear-local-delete']);
+    expect(await repository.loadTasks(), isEmpty);
+    expect(authRepository.currentUser, isNull);
   });
 
   testWidgets('bloque l’analyse IA tant que le consentement est refusé', (
@@ -537,4 +602,65 @@ void main() {
 
     expect(find.byIcon(Icons.warning_amber_rounded), findsNWidgets(2));
   });
+}
+
+Future<void> _openAccountDeletion(WidgetTester tester) async {
+  await tester.tap(find.text('Réglages').last);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Mon espace'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Supprimer le compte'));
+  await tester.pumpAndSettle();
+}
+
+class _TrackingPlanifyRepository extends InMemoryPlanifyRepository {
+  _TrackingPlanifyRepository(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> clearLocalAccountData({required bool deleteTasks}) {
+    events.add(deleteTasks ? 'clear-local-delete' : 'clear-local-keep');
+    return super.clearLocalAccountData(deleteTasks: deleteTasks);
+  }
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  _FakeAuthRepository(this.events);
+
+  final List<String> events;
+  User? _user = User.fromJson({
+    'id': '00000000-0000-4000-8000-000000000001',
+    'aud': 'authenticated',
+    'created_at': DateTime.utc(2026).toIso8601String(),
+    'app_metadata': <String, dynamic>{},
+    'user_metadata': <String, dynamic>{},
+  });
+
+  @override
+  User? get currentUser => _user;
+
+  @override
+  Stream<AuthState> get authStateChanges => const Stream<AuthState>.empty();
+
+  @override
+  Future<void> deleteAccount() async {
+    events.add('delete-account');
+    _user = null;
+  }
+
+  @override
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> signUp({
+    required String email,
+    required String password,
+  }) async {}
 }

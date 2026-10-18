@@ -121,6 +121,20 @@ class SqlitePlanifyRepository implements PlanoRepository, SyncTaskRepository {
   }
 
   @override
+  Future<void> clearLocalAccountData({required bool deleteTasks}) async {
+    final database = await _db;
+    await database.transaction((transaction) async {
+      await transaction.delete('sync_queue');
+      await transaction.delete('sync_metadata');
+      if (deleteTasks) {
+        await transaction.delete('tasks');
+        await transaction.delete('preferences');
+        await transaction.delete('calendar_settings');
+      }
+    });
+  }
+
+  @override
   Future<List<SyncQueueOperation>> loadSyncQueue() async {
     final rows = await (await _db).query(
       'sync_queue',

@@ -126,6 +126,11 @@ class LocalReminderService {
     await _notifications.cancel(id: _notificationId(task.id));
   }
 
+  Future<void> cancelAll() async {
+    if (!isAvailable) return;
+    await _notifications.cancelAll();
+  }
+
   int _notificationId(String taskId) => taskId.codeUnits.fold<int>(
     0,
     (value, unit) => (value * 31 + unit) & 0x7fffffff,

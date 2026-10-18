@@ -42,6 +42,14 @@ class InMemoryPlanifyRepository implements PlanoRepository, TaskRepository {
   }
 
   @override
+  Future<void> clearLocalAccountData({required bool deleteTasks}) async {
+    if (!deleteTasks) return;
+    _tasks.clear();
+    _darkMode = false;
+    _calendarId = null;
+  }
+
+  @override
   Future<List<FixedEvent>> loadEvents(DateTime date) async =>
       const <FixedEvent>[];
 

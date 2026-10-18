@@ -10,6 +10,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'core/config/app_config.dart';
 import 'data/ai_task_service.dart';
 import 'data/auth_repository.dart';
+import 'data/auth_service.dart';
 import 'data/database_initializer.dart';
 import 'data/device_calendar_service.dart';
 import 'data/local_reminder_service.dart';
@@ -57,10 +58,16 @@ const _ink = Color(0xFF111827);
 const _canvas = Color(0xFFF7F7FB);
 
 class PlanoApp extends StatefulWidget {
-  const PlanoApp({super.key, this.repository, this.taskRepository});
+  const PlanoApp({
+    super.key,
+    this.repository,
+    this.taskRepository,
+    this.authRepository,
+  });
 
   final PlanoRepository? repository;
   final TaskRepository? taskRepository;
+  final AuthRepository? authRepository;
 
   @override
   State<PlanoApp> createState() => _PlanoAppState();
@@ -100,9 +107,10 @@ class _PlanoAppState extends State<PlanoApp> {
   @override
   void initState() {
     super.initState();
+    _authRepository = widget.authRepository;
     if (AppConfig.isConfigured) {
       final client = Supabase.instance.client;
-      _authRepository = SupabaseAuthRepository(client);
+      _authRepository ??= SupabaseAuthRepository(client);
       final taskRepository = _taskRepository;
       if (taskRepository is SyncTaskRepository) {
         final service = TaskSyncService(
@@ -182,24 +190,32 @@ class _PlanoAppState extends State<PlanoApp> {
       return;
     }
     if (authRepository.currentUser != null) {
-      final shouldSignOut = await showDialog<bool>(
+      final accountAction = await showDialog<String>(
         context: _appContext!,
         builder: (context) => AlertDialog(
           title: const Text('Compte connecté'),
           content: Text(authRepository.currentUser?.email ?? ''),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Annuler'),
             ),
+            TextButton(
+              onPressed: () => Navigator.pop(context, 'delete'),
+              child: const Text('Supprimer le compte'),
+            ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(context, 'signOut'),
               child: const Text('Déconnexion'),
             ),
           ],
         ),
       );
-      if (shouldSignOut != true) return;
+      if (accountAction == 'delete') {
+        await _confirmAccountDeletion();
+        return;
+      }
+      if (accountAction != 'signOut') return;
       try {
         await authRepository.signOut();
       } on Object catch (error) {
@@ -385,6 +401,153 @@ class _PlanoAppState extends State<PlanoApp> {
     );
     emailController.dispose();
     passwordController.dispose();
+  }
+
+  Future<void> _confirmAccountDeletion() async {
+    final authRepository = _authRepository;
+    if (authRepository == null || authRepository.currentUser == null) return;
+
+    var deleting = false;
+    String? errorMessage;
+    final confirmed = await showDialog<bool>(
+      context: _appContext!,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> confirmDeletion() async {
+            setDialogState(() {
+              deleting = true;
+              errorMessage = null;
+            });
+            try {
+              await authRepository.deleteAccount();
+              if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+            } on AccountDeletionFailure catch (error) {
+              if (dialogContext.mounted) {
+                setDialogState(() => errorMessage = error.message);
+              }
+            } on Object catch (error) {
+              if (dialogContext.mounted) {
+                setDialogState(
+                  () => errorMessage =
+                      'La suppression du compte a échoué : $error',
+                );
+              }
+            } finally {
+              if (dialogContext.mounted) {
+                setDialogState(() => deleting = false);
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Supprimer définitivement le compte ?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cette action supprime définitivement votre compte, vos '
+                  'tâches et votre historique IA enregistrés sur le serveur. '
+                  'Vous ne pourrez plus vous connecter à ce compte.',
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: deleting ? null : () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: deleting ? null : confirmDeletion,
+                child: deleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Supprimer définitivement'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {});
+    final eraseLocalData = await showDialog<bool>(
+      context: _appContext!,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Que faire des données locales ?'),
+          content: const Text(
+            'Le compte et ses données serveur ont été supprimés. Choisissez '
+            'si les tâches et réglages déjà présents sur cet appareil doivent '
+            'être conservés.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Garder localement'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Tout effacer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final shouldEraseLocalData = eraseLocalData ?? false;
+    try {
+      String? reminderWarning;
+      if (shouldEraseLocalData) {
+        try {
+          await _reminderService.cancelAll();
+        } on Object catch (error) {
+          reminderWarning = 'Rappels non annulés : $error';
+        }
+      }
+      await _taskRepository.clearLocalAccountData(
+        deleteTasks: shouldEraseLocalData,
+      );
+      if (shouldEraseLocalData) {
+        setState(() {
+          _tasks.clear();
+          _aiConsentGranted = false;
+          _darkMode = false;
+          _calendarId = null;
+        });
+      }
+      _showMessage(
+        reminderWarning ??
+            (shouldEraseLocalData
+                ? 'Compte supprimé et données locales effacées.'
+                : 'Compte supprimé. Données conservées sur cet appareil, sans compte.'),
+      );
+    } on Object catch (error) {
+      _showMessage(
+        'Compte supprimé, mais le nettoyage local a échoué : $error',
+      );
+    }
   }
 
   Future<void> _loadInitialData() async {

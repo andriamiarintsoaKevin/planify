@@ -1,5 +1,16 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+const String deleteAccountFunctionName = 'delete-account';
+
+class AccountDeletionFailure implements Exception {
+  const AccountDeletionFailure(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class AuthFailure implements Exception {
   const AuthFailure(this.message);
 
@@ -55,6 +66,44 @@ class AuthService {
     } on AuthException catch (error) {
       throw AuthFailure(_messageFor(error, action: 'déconnexion'));
     }
+  }
+
+  Future<void> deleteAccount() async {
+    if (_client.auth.currentSession == null) {
+      throw const AccountDeletionFailure(
+        'Reconnectez-vous avant de supprimer votre compte.',
+      );
+    }
+
+    try {
+      final response = await _client.functions.invoke(
+        deleteAccountFunctionName,
+        body: const <String, Object?>{},
+      );
+      if (response.data is! Map || response.data['success'] != true) {
+        throw const AccountDeletionFailure(
+          'La suppression du compte n’a pas été confirmée par le serveur.',
+        );
+      }
+    } on AccountDeletionFailure {
+      rethrow;
+    } on FunctionException catch (error) {
+      if (error.status == 0) {
+        throw const AccountDeletionFailure(
+          'Connexion impossible. Vérifiez votre réseau puis réessayez.',
+        );
+      }
+      if (error.status == 401) {
+        throw const AccountDeletionFailure(
+          'Votre session a expiré. Reconnectez-vous puis réessayez.',
+        );
+      }
+      throw const AccountDeletionFailure(
+        'Le serveur n’a pas pu supprimer le compte. Réessayez plus tard.',
+      );
+    }
+
+    await _client.auth.signOut(scope: SignOutScope.local);
   }
 
   String _messageFor(AuthException error, {required String action}) {
