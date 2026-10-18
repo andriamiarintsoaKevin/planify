@@ -200,10 +200,6 @@ class _PlanoAppState extends State<PlanoApp> {
               onPressed: () => Navigator.pop(context),
               child: const Text('Annuler'),
             ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, 'delete'),
-              child: const Text('Supprimer le compte'),
-            ),
             FilledButton(
               onPressed: () => Navigator.pop(context, 'signOut'),
               child: const Text('Déconnexion'),

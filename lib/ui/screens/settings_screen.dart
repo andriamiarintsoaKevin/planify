@@ -64,33 +64,6 @@ extension _PlanoSettingsScreen on _PlanoAppState {
               onChanged: _setDarkMode,
             ),
           ),
-          Card(
-            child: ListTile(
-              leading: const Icon(Icons.auto_awesome_outlined),
-              title: const Text('Assistant IA'),
-              subtitle: Text(
-                _aiConsentGranted
-                    ? 'Consentement Google (Gemini) accordé sur cet appareil'
-                    : 'Le consentement sera demandé avant le premier envoi',
-              ),
-              trailing: _aiConsentGranted
-                  ? TextButton(
-                      onPressed: _revokeAiConsent,
-                      child: const Text('Révoquer'),
-                    )
-                  : const Icon(Icons.chevron_right),
-              onTap: _aiConsentGranted ? null : _openAiTaskScreen,
-            ),
-          ),
-          if (_aiConsentGranted)
-            Card(
-              child: ListTile(
-                leading: const Icon(Icons.edit_note_outlined),
-                title: const Text('Créer des tâches avec l’IA'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: _openAiTaskScreen,
-              ),
-            ),
           const SizedBox(height: 14),
           const _SettingsHeader('Calendriers'),
           Card(
@@ -125,7 +98,34 @@ extension _PlanoSettingsScreen on _PlanoAppState {
               ),
             ),
           const SizedBox(height: 14),
-          const _SettingsHeader('Données'),
+          const _SettingsHeader('Mes données'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.auto_awesome_outlined),
+              title: const Text('Assistant IA'),
+              subtitle: Text(
+                _aiConsentGranted
+                    ? 'Consentement Google (Gemini) accordé sur cet appareil'
+                    : 'Le consentement sera demandé avant le premier envoi',
+              ),
+              trailing: _aiConsentGranted
+                  ? TextButton(
+                      onPressed: _revokeAiConsent,
+                      child: const Text('Révoquer'),
+                    )
+                  : const Icon(Icons.chevron_right),
+              onTap: _aiConsentGranted ? null : _openAiTaskScreen,
+            ),
+          ),
+          if (_aiConsentGranted)
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.edit_note_outlined),
+                title: const Text('Créer des tâches avec l’IA'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: _openAiTaskScreen,
+              ),
+            ),
           Card(
             child: ListTile(
               leading: const Icon(Icons.download_outlined),
@@ -135,6 +135,23 @@ extension _PlanoSettingsScreen on _PlanoAppState {
               onTap: _exportData,
             ),
           ),
+          if (_authRepository?.currentUser != null)
+            Card(
+              child: ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: Theme.of(context).colorScheme.error,
+                ),
+                title: Text(
+                  'Supprimer mon compte',
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                ),
+                subtitle: const Text(
+                  'Effacer le compte et les données du serveur',
+                ),
+                onTap: _confirmAccountDeletion,
+              ),
+            ),
           const SizedBox(height: 14),
           const _SettingsHeader('À propos'),
           Card(

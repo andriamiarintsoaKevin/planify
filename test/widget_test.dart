@@ -127,10 +127,7 @@ void main() {
 
       expect(events, ['delete-account', 'clear-local-keep']);
       expect((await repository.loadTasks()).single.id, 'local-task');
-      expect(
-        find.text('Aucun compte connecté · données locales'),
-        findsOneWidget,
-      );
+      expect(authRepository.currentUser, isNull);
     },
   );
 
@@ -607,9 +604,18 @@ void main() {
 Future<void> _openAccountDeletion(WidgetTester tester) async {
   await tester.tap(find.text('Réglages').last);
   await tester.pumpAndSettle();
-  await tester.tap(find.text('Mon espace'));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Supprimer le compte'));
+  await tester.scrollUntilVisible(
+    find.text('Mes données'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  expect(find.text('Mes données'), findsOneWidget);
+  await tester.scrollUntilVisible(
+    find.text('Supprimer mon compte'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.tap(find.text('Supprimer mon compte'));
   await tester.pumpAndSettle();
 }
 
