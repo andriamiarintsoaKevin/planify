@@ -2,6 +2,7 @@ part of '../../main.dart';
 
 extension _PlanoInboxScreen on _PlanoAppState {
   Widget _inboxPage() {
+    final context = _themeContext;
     final inbox =
         _tasks.where((task) => task.status == TaskStatus.inbox).toList()
           ..sort((a, b) {
@@ -22,7 +23,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
               child: _badge(
                 '${inbox.length} à planifier',
                 Theme.of(context).colorScheme.primaryContainer,
-                _primary,
+                Theme.of(context).colorScheme.primary,
               ),
             ),
           ),
@@ -66,12 +67,12 @@ extension _PlanoInboxScreen on _PlanoAppState {
                           padding: const EdgeInsets.only(right: 22),
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
-                            color: _danger,
+                            color: Theme.of(context).colorScheme.error,
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Icon(
+                          child: Icon(
                             Icons.delete_outline,
-                            color: Colors.white,
+                            color: Theme.of(context).colorScheme.onError,
                           ),
                         ),
                         onDismissed: (_) => _deleteTask(task),
@@ -98,7 +99,10 @@ extension _PlanoInboxScreen on _PlanoAppState {
                             : 'Planifier automatiquement les ${inbox.length} tâches',
                       ),
                       style: FilledButton.styleFrom(
-                        backgroundColor: _primary,
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(context)
+                            .colorScheme
+                            .onPrimary,
                         minimumSize: const Size.fromHeight(52),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -122,6 +126,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
   }
 
   Widget _taskCard(PlanoTask task) {
+    final context = _themeContext;
     final projectColor = _projectColor(task.project);
     final priorityColor = _priorityColor(context, task.priority);
     return Card(
@@ -184,7 +189,7 @@ extension _PlanoInboxScreen on _PlanoAppState {
                           ),
                         if (task.dueDate != null)
                           _badge(
-                            'Avant ${_clock(task.dueDate!)}',
+                            'Avant ${_formatDate(task.dueDate!)}',
                             _priorityTint(context, TaskPriority.high),
                             _priorityColor(context, TaskPriority.high),
                           ),
@@ -196,9 +201,9 @@ extension _PlanoInboxScreen on _PlanoAppState {
               IconButton(
                 tooltip: 'Planifier cette tâche',
                 onPressed: () => _openPlannerSetup(onlyTask: task),
-                icon: const Icon(
+                icon: Icon(
                   Icons.calendar_month_outlined,
-                  color: _primary,
+                  color: Theme.of(context).colorScheme.primary,
                 ),
               ),
             ],

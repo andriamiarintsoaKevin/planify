@@ -2,6 +2,7 @@ part of '../../main.dart';
 
 extension _PlanoSettingsScreen on _PlanoAppState {
   Widget _settingsPage() {
+    final context = _themeContext;
     return Scaffold(
       appBar: AppBar(
         title: const Text(

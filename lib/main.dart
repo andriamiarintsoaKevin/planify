@@ -175,6 +175,8 @@ class _PlanoAppState extends State<PlanoApp> {
 
   bool get _hasProAppearance => _entitlementService?.isPro ?? false;
 
+  BuildContext get _themeContext => _appContext ?? context;
+
   void _attachEntitlementService(
     EntitlementService service, {
     required bool owned,
@@ -879,8 +881,11 @@ class _PlanoAppState extends State<PlanoApp> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showTaskEditor,
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(_themeContext).colorScheme.primary,
+        foregroundColor: Theme.of(_themeContext).colorScheme.onPrimary,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
         shape: const CircleBorder(),
         child: const Icon(Icons.add_rounded, size: 30),
       ),
@@ -1407,7 +1412,11 @@ class _PlanoAppState extends State<PlanoApp> {
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
         child: Column(
           children: [
-            Icon(icon, size: 34, color: _primary),
+            Icon(
+              icon,
+              size: 34,
+              color: Theme.of(_themeContext).colorScheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(
               title,
@@ -1418,7 +1427,7 @@ class _PlanoAppState extends State<PlanoApp> {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: Theme.of(_themeContext).colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),

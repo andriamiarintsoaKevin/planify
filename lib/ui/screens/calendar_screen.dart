@@ -2,6 +2,7 @@ part of '../../main.dart';
 
 extension _PlanoCalendarScreen on _PlanoAppState {
   Widget _calendarPage() {
+    final context = _themeContext;
     final scheduled =
         _tasks
             .where(
@@ -78,11 +79,11 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (_hasScheduleConflict(task))
-                          const Tooltip(
+                          Tooltip(
                             message: 'Cette tâche chevauche une autre tâche',
                             child: Icon(
                               Icons.warning_amber_rounded,
-                              color: _danger,
+                              color: Theme.of(context).colorScheme.error,
                             ),
                           ),
                         if (task.isLocked)
