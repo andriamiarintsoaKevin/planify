@@ -13,6 +13,7 @@ import 'data/auth_repository.dart';
 import 'data/auth_service.dart';
 import 'data/database_initializer.dart';
 import 'data/device_calendar_service.dart';
+import 'data/entitlement_service.dart';
 import 'data/local_reminder_service.dart';
 import 'data/plano_repository.dart';
 import 'data/sqlite_planify_repository.dart';
@@ -23,6 +24,7 @@ import 'data/task_sync_service.dart';
 import 'domain/planner.dart';
 
 import 'package:device_calendar_plus/device_calendar_plus.dart' show Calendar;
+import 'package:shared_preferences/shared_preferences.dart';
 
 part 'ui/screens/today_screen.dart';
 part 'ui/screens/inbox_screen.dart';
@@ -50,12 +52,18 @@ Future<void> main() async {
 }
 
 const _primary = Color(0xFF4F46E5);
-const _primarySoft = Color(0xFFEEF0FF);
 const _success = Color(0xFF10B981);
 const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFEF4444);
 const _ink = Color(0xFF111827);
 const _canvas = Color(0xFFF7F7FB);
+const _appearancePreferencesKey = 'planify.appearance.v1';
+const _revenueCatPublicApiKey = String.fromEnvironment(
+  'REVENUECAT_PUBLIC_API_KEY',
+);
+const _proEntitlementId = String.fromEnvironment(
+  'REVENUECAT_PRO_ENTITLEMENT_ID',
+);
 
 class PlanoApp extends StatefulWidget {
   const PlanoApp({
@@ -63,18 +71,20 @@ class PlanoApp extends StatefulWidget {
     this.repository,
     this.taskRepository,
     this.authRepository,
+    this.entitlementService,
   });
 
   final PlanoRepository? repository;
   final TaskRepository? taskRepository;
   final AuthRepository? authRepository;
+  final EntitlementService? entitlementService;
 
   @override
   State<PlanoApp> createState() => _PlanoAppState();
 }
 
 class _PlanoAppState extends State<PlanoApp> {
-  bool _darkMode = false;
+  AppearanceSettings _appearanceSettings = const AppearanceSettings();
   late final SqlitePlanifyRepository _defaultRepository =
       SqlitePlanifyRepository();
   late final PlanoRepository _repository =
@@ -99,6 +109,10 @@ class _PlanoAppState extends State<PlanoApp> {
   bool _isLoading = true;
   Object? _loadError;
   AuthRepository? _authRepository;
+  EntitlementService? _entitlementService;
+  StreamSubscription<AuthState>? _authStateSubscription;
+  final _proAppearanceAccess = ValueNotifier(false);
+  bool _ownsEntitlementService = false;
   TaskSyncService? _taskSyncService;
   SyncStatus _syncStatus = SyncStatus.offline;
   int _seenRemoteChangesVersion = 0;
@@ -108,9 +122,24 @@ class _PlanoAppState extends State<PlanoApp> {
   void initState() {
     super.initState();
     _authRepository = widget.authRepository;
+    if (widget.entitlementService case final service?) {
+      _attachEntitlementService(service, owned: false);
+      unawaited(_initializeEntitlementService(service));
+    }
     if (AppConfig.isConfigured) {
       final client = Supabase.instance.client;
       _authRepository ??= SupabaseAuthRepository(client);
+      if (widget.entitlementService == null &&
+          _proEntitlementId.isNotEmpty &&
+          _authRepository != null) {
+        _authStateSubscription = _authRepository!.authStateChanges.listen(
+          (_) => unawaited(_configureEntitlementForCurrentUser()),
+          onError: (Object error) {
+            if (mounted) _showMessage('Droits Pro non actualisés : $error');
+          },
+        );
+        unawaited(_configureEntitlementForCurrentUser());
+      }
       final taskRepository = _taskRepository;
       if (taskRepository is SyncTaskRepository) {
         final service = TaskSyncService(
@@ -124,7 +153,10 @@ class _PlanoAppState extends State<PlanoApp> {
       }
     }
     _clockRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        _proAppearanceAccess.value = _hasProAppearance;
+        setState(() {});
+      }
     });
     _loadInitialData();
   }
@@ -132,9 +164,63 @@ class _PlanoAppState extends State<PlanoApp> {
   @override
   void dispose() {
     _clockRefreshTimer.cancel();
+    unawaited(_authStateSubscription?.cancel());
+    _entitlementService?.removeListener(_onEntitlementChanged);
+    if (_ownsEntitlementService) _entitlementService?.dispose();
     _taskSyncService?.removeListener(_onSyncStatusChanged);
     _taskSyncService?.dispose();
+    _proAppearanceAccess.dispose();
     super.dispose();
+  }
+
+  bool get _hasProAppearance => _entitlementService?.isPro ?? false;
+
+  void _attachEntitlementService(
+    EntitlementService service, {
+    required bool owned,
+  }) {
+    _entitlementService?.removeListener(_onEntitlementChanged);
+    if (_ownsEntitlementService) _entitlementService?.dispose();
+    _entitlementService = service;
+    _ownsEntitlementService = owned;
+    _proAppearanceAccess.value = service.isPro;
+    service.addListener(_onEntitlementChanged);
+  }
+
+  void _onEntitlementChanged() {
+    _proAppearanceAccess.value = _hasProAppearance;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initializeEntitlementService(EntitlementService service) async {
+    try {
+      await service.initialize();
+    } on Object catch (error) {
+      if (mounted) _showMessage('Droits Pro non actualisés : $error');
+    }
+  }
+
+  Future<void> _configureEntitlementForCurrentUser() async {
+    final user = _authRepository?.currentUser;
+    if (user == null) {
+      if (_entitlementService != null) {
+        _entitlementService?.removeListener(_onEntitlementChanged);
+        if (_ownsEntitlementService) _entitlementService?.dispose();
+        _entitlementService = null;
+        _ownsEntitlementService = false;
+        _proAppearanceAccess.value = false;
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+    if (_entitlementService?.appUserId == user.id) return;
+    final service = EntitlementService(
+      apiKey: _revenueCatPublicApiKey,
+      appUserId: user.id,
+      proEntitlementId: _proEntitlementId,
+    );
+    _attachEntitlementService(service, owned: true);
+    await _initializeEntitlementService(service);
   }
 
   void _onSyncStatusChanged() {
@@ -526,10 +612,21 @@ class _PlanoAppState extends State<PlanoApp> {
         deleteTasks: shouldEraseLocalData,
       );
       if (shouldEraseLocalData) {
+        await _repository.saveDarkMode(false);
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.remove(_appearancePreferencesKey);
+        final entitlement = _entitlementService;
+        if (entitlement != null) {
+          entitlement.removeListener(_onEntitlementChanged);
+          if (_ownsEntitlementService) entitlement.dispose();
+          _entitlementService = null;
+          _ownsEntitlementService = false;
+          _proAppearanceAccess.value = false;
+        }
         setState(() {
           _tasks.clear();
           _aiConsentGranted = false;
-          _darkMode = false;
+          _appearanceSettings = const AppearanceSettings();
           _calendarId = null;
         });
       }
@@ -558,6 +655,13 @@ class _PlanoAppState extends State<PlanoApp> {
         _repository.loadDarkMode(),
         _repository.loadCalendarId(),
       ]);
+      final preferences = await SharedPreferences.getInstance();
+      final appearanceJson = preferences.getString(_appearancePreferencesKey);
+      final appearance = appearanceJson == null
+          ? AppearanceSettings(darkMode: values[2] as bool)
+          : AppearanceSettings.fromJson(
+              jsonDecode(appearanceJson) as Map<String, dynamic>,
+            );
       final aiConsentGranted = _repository is SqlitePlanifyRepository
           ? await _repository.loadAiConsent()
           : false;
@@ -567,7 +671,7 @@ class _PlanoAppState extends State<PlanoApp> {
           ..clear()
           ..addAll(values[0] as List<PlanoTask>);
         _events = values[1] as List<FixedEvent>;
-        _darkMode = values[2] as bool;
+        _appearanceSettings = appearance;
         _calendarId = values[3] as String?;
         _aiConsentGranted = aiConsentGranted;
         _isLoading = false;
@@ -642,12 +746,18 @@ class _PlanoAppState extends State<PlanoApp> {
     }
   }
 
-  Future<void> _setDarkMode(bool enabled) async {
+  Future<void> _saveAppearanceSettings(AppearanceSettings appearance) async {
     try {
-      await _repository.saveDarkMode(enabled);
-      if (mounted) setState(() => _darkMode = enabled);
+      final preferences = await SharedPreferences.getInstance();
+      final saved = await preferences.setString(
+        _appearancePreferencesKey,
+        jsonEncode(appearance.toJson()),
+      );
+      if (!saved) throw StateError('Impossible d’enregistrer les préférences.');
+      await _repository.saveDarkMode(appearance.darkMode);
+      if (mounted) setState(() => _appearanceSettings = appearance);
     } on Object catch (error) {
-      _showMessage('Impossible d’enregistrer le thème : $error');
+      _showMessage('Impossible d’enregistrer l’apparence : $error');
     }
   }
 

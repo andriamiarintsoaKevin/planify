@@ -63,8 +63,16 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                     ),
                     title: Text(task.title),
                     subtitle: Text(
-                      '${_taskTimeRangeOnDay(task, _selectedDate)}'
-                      '${task.project.isEmpty ? '' : ' · ${task.project}'}',
+                      _appearanceSettings
+                                  .effective(proAccess: _hasProAppearance)
+                                  .plannerDisplay ==
+                              PlannerDisplay.detailed
+                          ? '${_taskTimeRangeOnDay(task, _selectedDate)}'
+                                ' · ${task.durationMinutes} min'
+                                ' · ${_priorityLabel(task.priority)}'
+                                '${task.project.isEmpty ? '' : ' · ${task.project}'}'
+                          : '${_taskTimeRangeOnDay(task, _selectedDate)}'
+                                '${task.project.isEmpty ? '' : ' · ${task.project}'}',
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,

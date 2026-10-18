@@ -3,12 +3,138 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:planify/data/auth_repository.dart';
+import 'package:planify/data/entitlement_service.dart';
 import 'package:planify/data/in_memory_planify_repository.dart';
 import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('les réglages gratuits gardent le thème indigo par défaut', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    final defaultPrimary = buildPlanifyTheme(
+      const AppearanceSettings(),
+      proAccess: false,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      defaultPrimary,
+    );
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Personnaliser l’apparence'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pro'), findsWidgets);
+    await tester.tap(find.text('Océan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Option Pro'), findsOneWidget);
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      defaultPrimary,
+    );
+  });
+
+  testWidgets('les choix Pro expirent visuellement sans perdre la sélection', (
+    WidgetTester tester,
+  ) async {
+    var now = DateTime.utc(2030, 1, 1);
+    final entitlement = EntitlementService(
+      apiKey: 'test-public-key',
+      appUserId: 'test-user',
+      proEntitlementId: 'pro',
+      provider: _AppearanceEntitlementProvider(
+        ProEntitlementStatus(
+          isActive: true,
+          expiresAt: now.add(const Duration(hours: 1)),
+          willRenew: true,
+        ),
+      ),
+      cache: _MemoryAppearanceEntitlementCache(),
+      clock: () => now,
+    );
+    await entitlement.initialize();
+    await tester.pumpWidget(
+      PlanoApp(
+        repository: InMemoryPlanifyRepository(),
+        entitlementService: entitlement,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Personnaliser l’apparence'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Océan'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Compacte'));
+    await tester.tap(find.text('Compacte'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Détaillé'));
+    await tester.tap(find.text('Détaillé'));
+    await tester.pumpAndSettle();
+
+    final proPrimary = buildPlanifyTheme(
+      const AppearanceSettings(theme: AppearanceTheme.ocean),
+      proAccess: true,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      proPrimary,
+    );
+
+    now = now.add(const Duration(hours: 2));
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pump();
+    final freePrimary = buildPlanifyTheme(
+      const AppearanceSettings(),
+      proAccess: false,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      freePrimary,
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    final saved = jsonDecode(
+      preferences.getString('planify.appearance.v1')!,
+    ) as Map<String, dynamic>;
+    expect(saved['theme'], AppearanceTheme.ocean.name);
+    expect(saved['density'], AppearanceDensity.compact.name);
+    expect(saved['plannerDisplay'], PlannerDisplay.detailed.name);
+    expect(find.text('Détaillé'), findsOneWidget);
+    expect(find.text('Pro'), findsWidgets);
+    entitlement.dispose();
+  });
+
   testWidgets('affiche les notifications en haut avec une progression', (
     WidgetTester tester,
   ) async {
@@ -166,6 +292,11 @@ void main() {
 
     await tester.tap(find.text('Réglages').last);
     await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Assistant IA'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.tap(find.text('Assistant IA'));
     await tester.pumpAndSettle();
     await tester.enterText(
@@ -532,9 +663,12 @@ void main() {
 
     await tester.tap(find.text('Réglages').last);
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView).last, const Offset(0, -260));
+    await tester.scrollUntilVisible(
+      find.text('Comprendre Planify'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Comprendre Planify'));
     await tester.tap(find.text('Comprendre Planify'));
     await tester.pumpAndSettle();
 
@@ -615,6 +749,7 @@ Future<void> _openAccountDeletion(WidgetTester tester) async {
     300,
     scrollable: find.byType(Scrollable).first,
   );
+  await tester.ensureVisible(find.text('Supprimer mon compte'));
   await tester.tap(find.text('Supprimer mon compte'));
   await tester.pumpAndSettle();
 }
@@ -669,4 +804,33 @@ class _FakeAuthRepository implements AuthRepository {
     required String email,
     required String password,
   }) async {}
+}
+
+class _AppearanceEntitlementProvider implements EntitlementProvider {
+  _AppearanceEntitlementProvider(this.status);
+
+  final ProEntitlementStatus status;
+
+  @override
+  Future<void> configure({
+    required String apiKey,
+    required String appUserId,
+  }) async {}
+
+  @override
+  Future<ProEntitlementStatus> fetchProEntitlement(
+    String entitlementId,
+  ) async => status;
+}
+
+class _MemoryAppearanceEntitlementCache implements EntitlementCache {
+  EntitlementSnapshot? snapshot;
+
+  @override
+  Future<EntitlementSnapshot?> read(String appUserId) async => snapshot;
+
+  @override
+  Future<void> write(String appUserId, EntitlementSnapshot snapshot) async {
+    this.snapshot = snapshot;
+  }
 }

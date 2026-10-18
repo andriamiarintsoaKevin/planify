@@ -56,12 +56,30 @@ extension _PlanoSettingsScreen on _PlanoAppState {
           const SizedBox(height: 14),
           const _SettingsHeader('Préférences'),
           Card(
-            child: SwitchListTile(
-              secondary: const Icon(Icons.dark_mode_outlined),
-              title: const Text('Apparence sombre'),
-              value: _darkMode,
-              activeThumbColor: _primary,
-              onChanged: _setDarkMode,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  secondary: const Icon(Icons.dark_mode_outlined),
+                  title: const Text('Apparence sombre'),
+                  value: _appearanceSettings.darkMode,
+                  onChanged: (enabled) => unawaited(
+                    _saveAppearanceSettings(
+                      _appearanceSettings.copyWith(darkMode: enabled),
+                    ),
+                  ),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.palette_outlined),
+                  title: const Text('Personnaliser l’apparence'),
+                  subtitle: Text(
+                    _hasProAppearance
+                        ? 'Thèmes, couleur, densité et affichage du planning'
+                        : 'Clair ou sombre · personnalisations Pro',
+                  ),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: _openAppearanceSettings,
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),
@@ -205,7 +223,7 @@ extension _PlanoSettingsScreen on _PlanoAppState {
             },
         ],
         'settings': {
-          'darkMode': _darkMode,
+          ..._appearanceSettings.toJson(),
           'calendarId': _calendarId,
           'aiGeminiConsentGranted': _aiConsentGranted,
         },
@@ -246,6 +264,20 @@ extension _PlanoSettingsScreen on _PlanoAppState {
     }
   }
 
+  Future<void> _openAppearanceSettings() =>
+      Navigator.of(_appContext!).push<void>(
+        MaterialPageRoute(
+          builder: (context) => ValueListenableBuilder<bool>(
+            valueListenable: _proAppearanceAccess,
+            builder: (context, proAccess, _) => _AppearanceSettingsPage(
+              settings: _appearanceSettings,
+              proAccess: proAccess,
+              onChanged: _saveAppearanceSettings,
+            ),
+          ),
+        ),
+      );
+
   IconData get _syncIcon => switch (_syncStatus) {
     SyncStatus.upToDate => Icons.cloud_done_outlined,
     SyncStatus.pending => Icons.cloud_upload_outlined,
@@ -263,6 +295,260 @@ extension _PlanoSettingsScreen on _PlanoAppState {
       SyncStatus.error => 'Erreur de synchronisation · réessayer',
       SyncStatus.offline => 'Hors ligne · connexion facultative',
     };
+  }
+}
+
+class _AppearanceSettingsPage extends StatefulWidget {
+  const _AppearanceSettingsPage({
+    required this.settings,
+    required this.proAccess,
+    required this.onChanged,
+  });
+
+  final AppearanceSettings settings;
+  final bool proAccess;
+  final Future<void> Function(AppearanceSettings) onChanged;
+
+  @override
+  State<_AppearanceSettingsPage> createState() =>
+      _AppearanceSettingsPageState();
+}
+
+class _AppearanceSettingsPageState extends State<_AppearanceSettingsPage> {
+  late AppearanceSettings _settings = widget.settings;
+
+  void _update(AppearanceSettings settings) {
+    setState(() => _settings = settings);
+    unawaited(widget.onChanged(settings));
+  }
+
+  Future<void> _showProMessage() => showDialog<void>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Option Pro'),
+      content: const Text(
+        'Cette personnalisation est réservée à l’offre Pro. '
+        'Votre choix reste mémorisé et sera réactivé si vos droits Pro reviennent.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Compris'),
+        ),
+      ],
+    ),
+  );
+
+  Widget _proChoice({
+    required String label,
+    required bool selected,
+    required VoidCallback onSelected,
+    Color? previewColor,
+    bool requiresPro = true,
+  }) => ChoiceChip(
+    selected: selected,
+    avatar: previewColor == null
+        ? null
+        : CircleAvatar(backgroundColor: previewColor, radius: 8),
+    label: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(label),
+        if (requiresPro && !widget.proAccess) ...[
+          const SizedBox(width: 6),
+          const Icon(Icons.lock_outline, size: 14),
+          const SizedBox(width: 3),
+          const Text('Pro'),
+        ],
+      ],
+    ),
+    onSelected: (_) {
+      if (!requiresPro || widget.proAccess) {
+        onSelected();
+      } else {
+        unawaited(_showProMessage());
+      }
+    },
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    final previewTheme = buildPlanifyTheme(_settings, proAccess: true);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Apparence')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(20, 4, 20, 32),
+        children: [
+          Card(
+            child: SwitchListTile(
+              secondary: const Icon(Icons.dark_mode_outlined),
+              title: const Text('Thème sombre'),
+              subtitle: const Text('Disponible gratuitement'),
+              value: _settings.darkMode,
+              onChanged: (value) =>
+                  _update(_settings.copyWith(darkMode: value)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _SettingsHeader('Thèmes supplémentaires'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _proChoice(
+                    label: 'Classique',
+                    selected: _settings.theme == AppearanceTheme.classic,
+                    requiresPro: false,
+                    previewColor:
+                        _appearanceThemeSeeds[AppearanceTheme.classic],
+                    onSelected: () => _update(
+                      _settings.copyWith(theme: AppearanceTheme.classic),
+                    ),
+                  ),
+                  _proChoice(
+                    label: 'Océan',
+                    selected: _settings.theme == AppearanceTheme.ocean,
+                    previewColor: _appearanceThemeSeeds[AppearanceTheme.ocean],
+                    onSelected: () => _update(
+                      _settings.copyWith(theme: AppearanceTheme.ocean),
+                    ),
+                  ),
+                  _proChoice(
+                    label: 'Forêt',
+                    selected: _settings.theme == AppearanceTheme.forest,
+                    previewColor: _appearanceThemeSeeds[AppearanceTheme.forest],
+                    onSelected: () => _update(
+                      _settings.copyWith(theme: AppearanceTheme.forest),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _SettingsHeader('Couleur d’accent'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final accent in AppearanceAccent.values)
+                    _proChoice(
+                      label: switch (accent) {
+                        AppearanceAccent.indigo => 'Indigo',
+                        AppearanceAccent.teal => 'Sarcelle',
+                        AppearanceAccent.amber => 'Ambre',
+                        AppearanceAccent.rose => 'Rose',
+                      },
+                      selected: _settings.accent == accent,
+                      previewColor: _appearanceAccents[accent],
+                      requiresPro: accent != AppearanceAccent.indigo,
+                      onSelected: () =>
+                          _update(_settings.copyWith(accent: accent)),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _SettingsHeader('Densité d’affichage'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  _proChoice(
+                    label: 'Aérée',
+                    selected: _settings.density == AppearanceDensity.spacious,
+                    requiresPro: false,
+                    onSelected: () => _update(
+                      _settings.copyWith(density: AppearanceDensity.spacious),
+                    ),
+                  ),
+                  _proChoice(
+                    label: 'Compacte',
+                    selected: _settings.density == AppearanceDensity.compact,
+                    onSelected: () => _update(
+                      _settings.copyWith(density: AppearanceDensity.compact),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _SettingsHeader('Affichage du planning'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Wrap(
+                spacing: 8,
+                children: [
+                  _proChoice(
+                    label: 'Simplifié',
+                    selected:
+                        _settings.plannerDisplay == PlannerDisplay.simplified,
+                    requiresPro: false,
+                    onSelected: () => _update(
+                      _settings.copyWith(
+                        plannerDisplay: PlannerDisplay.simplified,
+                      ),
+                    ),
+                  ),
+                  _proChoice(
+                    label: 'Détaillé',
+                    selected:
+                        _settings.plannerDisplay == PlannerDisplay.detailed,
+                    onSelected: () => _update(
+                      _settings.copyWith(
+                        plannerDisplay: PlannerDisplay.detailed,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const _SettingsHeader('Aperçu'),
+          Theme(
+            data: previewTheme,
+            child: Card(
+              child: ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: previewTheme.colorScheme.primaryContainer,
+                  child: Icon(
+                    Icons.check,
+                    color: previewTheme.colorScheme.onPrimaryContainer,
+                  ),
+                ),
+                title: const Text('Préparer la journée'),
+                subtitle: const Text('09:00 · 45 min · Priorité moyenne'),
+                trailing: Icon(
+                  Icons.circle,
+                  color: previewTheme.colorScheme.primary,
+                ),
+              ),
+            ),
+          ),
+          if (!widget.proAccess)
+            Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                'Les options marquées Pro sont verrouillées. Votre sélection '
+                'personnelle est conservée pendant une expiration.',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
