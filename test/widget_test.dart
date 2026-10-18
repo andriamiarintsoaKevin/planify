@@ -51,6 +51,44 @@ void main() {
     expect(find.text('Planifier automatiquement les 4 tâches'), findsNothing);
   });
 
+  testWidgets('bloque l’analyse IA tant que le consentement est refusé', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Assistant IA'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Préparer une présentation',
+    );
+    await tester.tap(find.text('Analyser'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Votre texte est envoyé à Google (Gemini) pour être analysé'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Pas maintenant'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Créer avec l’IA'), findsOneWidget);
+    expect(
+      find.text('Connectez-vous pour utiliser l’analyse IA.'),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Analyser'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Votre texte est envoyé à Google (Gemini) pour être analysé'),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('permet de prévisualiser puis valider un plan', (
     WidgetTester tester,
   ) async {

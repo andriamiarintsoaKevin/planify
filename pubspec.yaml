@@ -46,6 +46,8 @@ dependencies:
   device_calendar_plus: ^0.10.1
   supabase_flutter: ^2.18.3
   connectivity_plus: ^7.3.2
+  flutter_timezone: ^5.1.1
+  http: ^1.6.0
 
 dev_dependencies:
   flutter_test:

@@ -6,6 +6,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
+import 'data/ai_task_service.dart';
 import 'data/auth_repository.dart';
 import 'data/database_initializer.dart';
 import 'data/device_calendar_service.dart';
@@ -85,6 +86,7 @@ class _PlanoAppState extends State<PlanoApp> {
   int _tabIndex = 0;
   List<PlanoTask>? _lastSnapshot;
   BuildContext? _appContext;
+  bool _aiConsentGranted = false;
   bool _isLoading = true;
   Object? _loadError;
   AuthRepository? _authRepository;
@@ -233,9 +235,7 @@ class _PlanoAppState extends State<PlanoApp> {
               }
               if (context.mounted) Navigator.pop(context);
               if (creatingAccount) {
-                _showMessage(
-                  'Compte créé. Confirmez votre e-mail si demandé.',
-                );
+                _showMessage('Compte créé. Confirmez votre e-mail si demandé.');
               }
             } on Object catch (error) {
               setDialogState(() => errorMessage = '$error');
@@ -397,6 +397,9 @@ class _PlanoAppState extends State<PlanoApp> {
         _repository.loadDarkMode(),
         _repository.loadCalendarId(),
       ]);
+      final aiConsentGranted = _repository is SqlitePlanifyRepository
+          ? await _repository.loadAiConsent()
+          : false;
       if (!mounted) return;
       setState(() {
         _tasks
@@ -405,6 +408,7 @@ class _PlanoAppState extends State<PlanoApp> {
         _events = values[1] as List<FixedEvent>;
         _darkMode = values[2] as bool;
         _calendarId = values[3] as String?;
+        _aiConsentGranted = aiConsentGranted;
         _isLoading = false;
       });
       if (_calendarId != null) {
@@ -484,6 +488,78 @@ class _PlanoAppState extends State<PlanoApp> {
     } on Object catch (error) {
       _showMessage('Impossible d’enregistrer le thème : $error');
     }
+  }
+
+  Future<void> _setAiConsent(bool granted) async {
+    try {
+      final repository = _repository;
+      if (repository is SqlitePlanifyRepository) {
+        await repository.saveAiConsent(granted);
+      }
+      if (mounted) setState(() => _aiConsentGranted = granted);
+    } on Object {
+      throw const AiTaskFailure(
+        AiTaskFailureKind.unavailable,
+        'Impossible d’enregistrer le réglage de consentement.',
+      );
+    }
+  }
+
+  Future<void> _revokeAiConsent() async {
+    try {
+      await _setAiConsent(false);
+      _showMessage('Consentement IA révoqué sur cet appareil');
+    } on AiTaskFailure catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  Future<List<PlanoTask>> _analyzeAiTasks(String text) async {
+    final authRepository = _authRepository;
+    if (authRepository == null) {
+      throw const AiTaskFailure(
+        AiTaskFailureKind.notConnected,
+        'Connectez-vous pour utiliser l’analyse IA.',
+      );
+    }
+    return _defaultRepository.parseAiTasks(
+      client: Supabase.instance.client,
+      text: text,
+    );
+  }
+
+  Future<bool> _addAiTasksToInbox(List<PlanoTask> tasks) async {
+    final addedIds = tasks.map((task) => task.id).toSet();
+    setState(() => _tasks.addAll(tasks));
+    if (!await _persistTasks()) {
+      if (mounted) {
+        setState(
+          () => _tasks.removeWhere((task) => addedIds.contains(task.id)),
+        );
+      }
+      return false;
+    }
+    if (mounted) {
+      setState(() => _tabIndex = 1);
+      _showMessage(
+        '${tasks.length} tâche${tasks.length == 1 ? '' : 's'} ajoutée${tasks.length == 1 ? '' : 's'} à l’Inbox',
+      );
+    }
+    return true;
+  }
+
+  Future<void> _openAiTaskScreen() async {
+    await Navigator.of(_appContext!).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _AiTaskScreen(
+          consentGranted: _aiConsentGranted,
+          onConsentAccepted: () => _setAiConsent(true),
+          onAnalyze: _analyzeAiTasks,
+          onAddToInbox: _addAiTasksToInbox,
+          onConnect: _showAccountDialog,
+        ),
+      ),
+    );
   }
 
   void _openProductGuide() {
