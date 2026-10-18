@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:planify/data/in_memory_planify_repository.dart';
@@ -49,6 +51,49 @@ void main() {
     expect(find.text('0 à planifier'), findsOneWidget);
     expect(find.text('Votre Inbox est vide'), findsOneWidget);
     expect(find.text('Planifier automatiquement les 4 tâches'), findsNothing);
+  });
+
+  testWidgets('exporte les tâches et réglages dans un JSON copiable', (
+    WidgetTester tester,
+  ) async {
+    final repository = InMemoryPlanifyRepository();
+    await repository.saveTasks([
+      PlanoTask(
+        id: 'export-task',
+        title: 'Préparer le dossier',
+        dueDate: DateTime(2026, 10, 20),
+      ),
+    ]);
+    await repository.saveDarkMode(true);
+    await repository.saveCalendarId('calendar-123');
+    await tester.pumpWidget(PlanoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Exporter mes données'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Exporter mes données'));
+    await tester.pumpAndSettle();
+
+    final jsonText = tester
+        .widget<SelectableText>(find.byType(SelectableText))
+        .data!;
+    final export = jsonDecode(jsonText) as Map<String, dynamic>;
+    final task = (export['tasks'] as List).single as Map<String, dynamic>;
+    final settings = export['settings'] as Map<String, dynamic>;
+
+    expect(export['formatVersion'], 1);
+    expect(task['id'], 'export-task');
+    expect(task['title'], 'Préparer le dossier');
+    expect(task['dueDate'], '2026-10-20T00:00:00.000');
+    expect(settings['darkMode'], isTrue);
+    expect(settings['calendarId'], 'calendar-123');
+    expect(settings['aiGeminiConsentGranted'], isFalse);
+    expect(find.text('Copier le JSON'), findsOneWidget);
   });
 
   testWidgets('bloque l’analyse IA tant que le consentement est refusé', (

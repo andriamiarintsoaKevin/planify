@@ -125,6 +125,17 @@ extension _PlanoSettingsScreen on _PlanoAppState {
               ),
             ),
           const SizedBox(height: 14),
+          const _SettingsHeader('Données'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.download_outlined),
+              title: const Text('Exporter mes données'),
+              subtitle: const Text('Copier les tâches et réglages en JSON'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: _exportData,
+            ),
+          ),
+          const SizedBox(height: 14),
           const _SettingsHeader('À propos'),
           Card(
             child: ListTile(
@@ -147,6 +158,75 @@ extension _PlanoSettingsScreen on _PlanoAppState {
         ],
       ),
     );
+  }
+
+  Future<void> _exportData() async {
+    try {
+      final tasks = await _taskRepository.loadTasks();
+      final export = {
+        'formatVersion': 1,
+        'exportedAt': DateTime.now().toUtc().toIso8601String(),
+        'tasks': [
+          for (final task in tasks)
+            {
+              'id': task.id,
+              'title': task.title,
+              'notes': task.notes,
+              'durationMinutes': task.durationMinutes,
+              'priority': task.priority.name,
+              'dueDate': task.dueDate?.toIso8601String(),
+              'plannedEnd': task.plannedEnd?.toIso8601String(),
+              'status': task.status.name,
+              'scheduledStart': task.scheduledStart?.toIso8601String(),
+              'project': task.project,
+              'isLocked': task.isLocked,
+              'isAiProposed': task.isAiProposed,
+              'isDurationEstimated': task.isDurationEstimated,
+              'reminderEnabled': task.reminderEnabled,
+              'createdAt': task.createdAt?.toIso8601String(),
+              'updatedAt': task.updatedAt?.toIso8601String(),
+            },
+        ],
+        'settings': {
+          'darkMode': _darkMode,
+          'calendarId': _calendarId,
+          'aiGeminiConsentGranted': _aiConsentGranted,
+        },
+      };
+      final json = const JsonEncoder.withIndent('  ').convert(export);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: _appContext!,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('Exporter mes données'),
+          content: SizedBox(
+            width: 560,
+            child: SingleChildScrollView(child: SelectableText(json)),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Fermer'),
+            ),
+            FilledButton.icon(
+              onPressed: () async {
+                try {
+                  await Clipboard.setData(ClipboardData(text: json));
+                  if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  _showMessage('JSON copié dans le presse-papiers');
+                } on Object catch (error) {
+                  _showMessage('Impossible de copier le JSON : $error');
+                }
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copier le JSON'),
+            ),
+          ],
+        ),
+      );
+    } on Object catch (error) {
+      _showMessage('Impossible de préparer l’export JSON : $error');
+    }
   }
 
   IconData get _syncIcon => switch (_syncStatus) {
