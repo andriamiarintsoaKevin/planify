@@ -17,7 +17,7 @@
 - Assistant IA : 30 requêtes par jour
 - Personnalisation : choix de la couleur d'accent, 2 thèmes supplémentaires,
   densité d'affichage (compacte ou aérée), vue du planning simplifiée ou détaillée
-- Réglages de planification avancés : [à compléter, ou « aucun pour la v1 »]
+- Aucun réglage de planification avancé supplémentaire pour la v1.
 
 ## Prix
 
