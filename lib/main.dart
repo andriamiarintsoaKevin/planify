@@ -1,14 +1,19 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/config/app_config.dart';
+import 'data/ai_task_service.dart';
 import 'data/auth_repository.dart';
+import 'data/auth_service.dart';
 import 'data/database_initializer.dart';
 import 'data/device_calendar_service.dart';
+import 'data/entitlement_service.dart';
 import 'data/local_reminder_service.dart';
 import 'data/plano_repository.dart';
 import 'data/sqlite_planify_repository.dart';
@@ -19,6 +24,7 @@ import 'data/task_sync_service.dart';
 import 'domain/planner.dart';
 
 import 'package:device_calendar_plus/device_calendar_plus.dart' show Calendar;
+import 'package:shared_preferences/shared_preferences.dart';
 
 part 'ui/screens/today_screen.dart';
 part 'ui/screens/inbox_screen.dart';
@@ -46,25 +52,39 @@ Future<void> main() async {
 }
 
 const _primary = Color(0xFF4F46E5);
-const _primarySoft = Color(0xFFEEF0FF);
 const _success = Color(0xFF10B981);
 const _warning = Color(0xFFF59E0B);
 const _danger = Color(0xFFEF4444);
 const _ink = Color(0xFF111827);
 const _canvas = Color(0xFFF7F7FB);
+const _appearancePreferencesKey = 'planify.appearance.v1';
+const _revenueCatPublicApiKey = String.fromEnvironment(
+  'REVENUECAT_PUBLIC_API_KEY',
+);
+const _proEntitlementId = String.fromEnvironment(
+  'REVENUECAT_PRO_ENTITLEMENT_ID',
+);
 
 class PlanoApp extends StatefulWidget {
-  const PlanoApp({super.key, this.repository, this.taskRepository});
+  const PlanoApp({
+    super.key,
+    this.repository,
+    this.taskRepository,
+    this.authRepository,
+    this.entitlementService,
+  });
 
   final PlanoRepository? repository;
   final TaskRepository? taskRepository;
+  final AuthRepository? authRepository;
+  final EntitlementService? entitlementService;
 
   @override
   State<PlanoApp> createState() => _PlanoAppState();
 }
 
 class _PlanoAppState extends State<PlanoApp> {
-  bool _darkMode = false;
+  AppearanceSettings _appearanceSettings = const AppearanceSettings();
   late final SqlitePlanifyRepository _defaultRepository =
       SqlitePlanifyRepository();
   late final PlanoRepository _repository =
@@ -85,9 +105,14 @@ class _PlanoAppState extends State<PlanoApp> {
   int _tabIndex = 0;
   List<PlanoTask>? _lastSnapshot;
   BuildContext? _appContext;
+  bool _aiConsentGranted = false;
   bool _isLoading = true;
   Object? _loadError;
   AuthRepository? _authRepository;
+  EntitlementService? _entitlementService;
+  StreamSubscription<AuthState>? _authStateSubscription;
+  final _proAppearanceAccess = ValueNotifier(false);
+  bool _ownsEntitlementService = false;
   TaskSyncService? _taskSyncService;
   SyncStatus _syncStatus = SyncStatus.offline;
   int _seenRemoteChangesVersion = 0;
@@ -96,9 +121,25 @@ class _PlanoAppState extends State<PlanoApp> {
   @override
   void initState() {
     super.initState();
+    _authRepository = widget.authRepository;
+    if (widget.entitlementService case final service?) {
+      _attachEntitlementService(service, owned: false);
+      unawaited(_initializeEntitlementService(service));
+    }
     if (AppConfig.isConfigured) {
       final client = Supabase.instance.client;
-      _authRepository = SupabaseAuthRepository(client);
+      _authRepository ??= SupabaseAuthRepository(client);
+      if (widget.entitlementService == null &&
+          _proEntitlementId.isNotEmpty &&
+          _authRepository != null) {
+        _authStateSubscription = _authRepository!.authStateChanges.listen(
+          (_) => unawaited(_configureEntitlementForCurrentUser()),
+          onError: (Object error) {
+            if (mounted) _showMessage('Droits Pro non actualisés : $error');
+          },
+        );
+        unawaited(_configureEntitlementForCurrentUser());
+      }
       final taskRepository = _taskRepository;
       if (taskRepository is SyncTaskRepository) {
         final service = TaskSyncService(
@@ -112,7 +153,10 @@ class _PlanoAppState extends State<PlanoApp> {
       }
     }
     _clockRefreshTimer = Timer.periodic(const Duration(minutes: 1), (_) {
-      if (mounted) setState(() {});
+      if (mounted) {
+        _proAppearanceAccess.value = _hasProAppearance;
+        setState(() {});
+      }
     });
     _loadInitialData();
   }
@@ -120,9 +164,65 @@ class _PlanoAppState extends State<PlanoApp> {
   @override
   void dispose() {
     _clockRefreshTimer.cancel();
+    unawaited(_authStateSubscription?.cancel());
+    _entitlementService?.removeListener(_onEntitlementChanged);
+    if (_ownsEntitlementService) _entitlementService?.dispose();
     _taskSyncService?.removeListener(_onSyncStatusChanged);
     _taskSyncService?.dispose();
+    _proAppearanceAccess.dispose();
     super.dispose();
+  }
+
+  bool get _hasProAppearance => _entitlementService?.isPro ?? false;
+
+  BuildContext get _themeContext => _appContext ?? context;
+
+  void _attachEntitlementService(
+    EntitlementService service, {
+    required bool owned,
+  }) {
+    _entitlementService?.removeListener(_onEntitlementChanged);
+    if (_ownsEntitlementService) _entitlementService?.dispose();
+    _entitlementService = service;
+    _ownsEntitlementService = owned;
+    _proAppearanceAccess.value = service.isPro;
+    service.addListener(_onEntitlementChanged);
+  }
+
+  void _onEntitlementChanged() {
+    _proAppearanceAccess.value = _hasProAppearance;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initializeEntitlementService(EntitlementService service) async {
+    try {
+      await service.initialize();
+    } on Object catch (error) {
+      if (mounted) _showMessage('Droits Pro non actualisés : $error');
+    }
+  }
+
+  Future<void> _configureEntitlementForCurrentUser() async {
+    final user = _authRepository?.currentUser;
+    if (user == null) {
+      if (_entitlementService != null) {
+        _entitlementService?.removeListener(_onEntitlementChanged);
+        if (_ownsEntitlementService) _entitlementService?.dispose();
+        _entitlementService = null;
+        _ownsEntitlementService = false;
+        _proAppearanceAccess.value = false;
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+    if (_entitlementService?.appUserId == user.id) return;
+    final service = EntitlementService(
+      apiKey: _revenueCatPublicApiKey,
+      appUserId: user.id,
+      proEntitlementId: _proEntitlementId,
+    );
+    _attachEntitlementService(service, owned: true);
+    await _initializeEntitlementService(service);
   }
 
   void _onSyncStatusChanged() {
@@ -178,24 +278,28 @@ class _PlanoAppState extends State<PlanoApp> {
       return;
     }
     if (authRepository.currentUser != null) {
-      final shouldSignOut = await showDialog<bool>(
+      final accountAction = await showDialog<String>(
         context: _appContext!,
         builder: (context) => AlertDialog(
           title: const Text('Compte connecté'),
           content: Text(authRepository.currentUser?.email ?? ''),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(context),
               child: const Text('Annuler'),
             ),
             FilledButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(context, 'signOut'),
               child: const Text('Déconnexion'),
             ),
           ],
         ),
       );
-      if (shouldSignOut != true) return;
+      if (accountAction == 'delete') {
+        await _confirmAccountDeletion();
+        return;
+      }
+      if (accountAction != 'signOut') return;
       try {
         await authRepository.signOut();
       } on Object catch (error) {
@@ -233,9 +337,7 @@ class _PlanoAppState extends State<PlanoApp> {
               }
               if (context.mounted) Navigator.pop(context);
               if (creatingAccount) {
-                _showMessage(
-                  'Compte créé. Confirmez votre e-mail si demandé.',
-                );
+                _showMessage('Compte créé. Confirmez votre e-mail si demandé.');
               }
             } on Object catch (error) {
               setDialogState(() => errorMessage = '$error');
@@ -385,6 +487,164 @@ class _PlanoAppState extends State<PlanoApp> {
     passwordController.dispose();
   }
 
+  Future<void> _confirmAccountDeletion() async {
+    final authRepository = _authRepository;
+    if (authRepository == null || authRepository.currentUser == null) return;
+
+    var deleting = false;
+    String? errorMessage;
+    final confirmed = await showDialog<bool>(
+      context: _appContext!,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          Future<void> confirmDeletion() async {
+            setDialogState(() {
+              deleting = true;
+              errorMessage = null;
+            });
+            try {
+              await authRepository.deleteAccount();
+              if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+            } on AccountDeletionFailure catch (error) {
+              if (dialogContext.mounted) {
+                setDialogState(() => errorMessage = error.message);
+              }
+            } on Object catch (error) {
+              if (dialogContext.mounted) {
+                setDialogState(
+                  () => errorMessage =
+                      'La suppression du compte a échoué : $error',
+                );
+              }
+            } finally {
+              if (dialogContext.mounted) {
+                setDialogState(() => deleting = false);
+              }
+            }
+          }
+
+          return AlertDialog(
+            title: const Text('Supprimer définitivement le compte ?'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Cette action supprime définitivement votre compte, vos '
+                  'tâches et votre historique IA enregistrés sur le serveur. '
+                  'Vous ne pourrez plus vous connecter à ce compte.',
+                ),
+                if (errorMessage != null) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    errorMessage!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: deleting ? null : () => Navigator.pop(context),
+                child: const Text('Annuler'),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: Theme.of(context).colorScheme.error,
+                ),
+                onPressed: deleting ? null : confirmDeletion,
+                child: deleting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('Supprimer définitivement'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    setState(() {});
+    final eraseLocalData = await showDialog<bool>(
+      context: _appContext!,
+      barrierDismissible: false,
+      builder: (context) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          title: const Text('Que faire des données locales ?'),
+          content: const Text(
+            'Le compte et ses données serveur ont été supprimés. Choisissez '
+            'si les tâches et réglages déjà présents sur cet appareil doivent '
+            'être conservés.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Garder localement'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Tout effacer'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    final shouldEraseLocalData = eraseLocalData ?? false;
+    try {
+      String? reminderWarning;
+      if (shouldEraseLocalData) {
+        try {
+          await _reminderService.cancelAll();
+        } on Object catch (error) {
+          reminderWarning = 'Rappels non annulés : $error';
+        }
+      }
+      await _taskRepository.clearLocalAccountData(
+        deleteTasks: shouldEraseLocalData,
+      );
+      if (shouldEraseLocalData) {
+        await _repository.saveDarkMode(false);
+        final preferences = await SharedPreferences.getInstance();
+        await preferences.remove(_appearancePreferencesKey);
+        final entitlement = _entitlementService;
+        if (entitlement != null) {
+          entitlement.removeListener(_onEntitlementChanged);
+          if (_ownsEntitlementService) entitlement.dispose();
+          _entitlementService = null;
+          _ownsEntitlementService = false;
+          _proAppearanceAccess.value = false;
+        }
+        setState(() {
+          _tasks.clear();
+          _aiConsentGranted = false;
+          _appearanceSettings = const AppearanceSettings();
+          _calendarId = null;
+        });
+      }
+      _showMessage(
+        reminderWarning ??
+            (shouldEraseLocalData
+                ? 'Compte supprimé et données locales effacées.'
+                : 'Compte supprimé. Données conservées sur cet appareil, sans compte.'),
+      );
+    } on Object catch (error) {
+      _showMessage(
+        'Compte supprimé, mais le nettoyage local a échoué : $error',
+      );
+    }
+  }
+
   Future<void> _loadInitialData() async {
     setState(() {
       _isLoading = true;
@@ -397,14 +657,25 @@ class _PlanoAppState extends State<PlanoApp> {
         _repository.loadDarkMode(),
         _repository.loadCalendarId(),
       ]);
+      final preferences = await SharedPreferences.getInstance();
+      final appearanceJson = preferences.getString(_appearancePreferencesKey);
+      final appearance = appearanceJson == null
+          ? AppearanceSettings(darkMode: values[2] as bool)
+          : AppearanceSettings.fromJson(
+              jsonDecode(appearanceJson) as Map<String, dynamic>,
+            );
+      final aiConsentGranted = _repository is SqlitePlanifyRepository
+          ? await _repository.loadAiConsent()
+          : false;
       if (!mounted) return;
       setState(() {
         _tasks
           ..clear()
           ..addAll(values[0] as List<PlanoTask>);
         _events = values[1] as List<FixedEvent>;
-        _darkMode = values[2] as bool;
+        _appearanceSettings = appearance;
         _calendarId = values[3] as String?;
+        _aiConsentGranted = aiConsentGranted;
         _isLoading = false;
       });
       if (_calendarId != null) {
@@ -477,13 +748,91 @@ class _PlanoAppState extends State<PlanoApp> {
     }
   }
 
-  Future<void> _setDarkMode(bool enabled) async {
+  Future<void> _saveAppearanceSettings(AppearanceSettings appearance) async {
     try {
-      await _repository.saveDarkMode(enabled);
-      if (mounted) setState(() => _darkMode = enabled);
+      final preferences = await SharedPreferences.getInstance();
+      final saved = await preferences.setString(
+        _appearancePreferencesKey,
+        jsonEncode(appearance.toJson()),
+      );
+      if (!saved) throw StateError('Impossible d’enregistrer les préférences.');
+      await _repository.saveDarkMode(appearance.darkMode);
+      if (mounted) setState(() => _appearanceSettings = appearance);
     } on Object catch (error) {
-      _showMessage('Impossible d’enregistrer le thème : $error');
+      _showMessage('Impossible d’enregistrer l’apparence : $error');
     }
+  }
+
+  Future<void> _setAiConsent(bool granted) async {
+    try {
+      final repository = _repository;
+      if (repository is SqlitePlanifyRepository) {
+        await repository.saveAiConsent(granted);
+      }
+      if (mounted) setState(() => _aiConsentGranted = granted);
+    } on Object {
+      throw const AiTaskFailure(
+        AiTaskFailureKind.unavailable,
+        'Impossible d’enregistrer le réglage de consentement.',
+      );
+    }
+  }
+
+  Future<void> _revokeAiConsent() async {
+    try {
+      await _setAiConsent(false);
+      _showMessage('Consentement IA révoqué sur cet appareil');
+    } on AiTaskFailure catch (error) {
+      _showMessage(error.message);
+    }
+  }
+
+  Future<List<PlanoTask>> _analyzeAiTasks(String text) async {
+    final authRepository = _authRepository;
+    if (authRepository == null) {
+      throw const AiTaskFailure(
+        AiTaskFailureKind.notConnected,
+        'Connectez-vous pour utiliser l’analyse IA.',
+      );
+    }
+    return _defaultRepository.parseAiTasks(
+      client: Supabase.instance.client,
+      text: text,
+    );
+  }
+
+  Future<bool> _addAiTasksToInbox(List<PlanoTask> tasks) async {
+    final addedIds = tasks.map((task) => task.id).toSet();
+    setState(() => _tasks.addAll(tasks));
+    if (!await _persistTasks()) {
+      if (mounted) {
+        setState(
+          () => _tasks.removeWhere((task) => addedIds.contains(task.id)),
+        );
+      }
+      return false;
+    }
+    if (mounted) {
+      setState(() => _tabIndex = 1);
+      _showMessage(
+        '${tasks.length} tâche${tasks.length == 1 ? '' : 's'} ajoutée${tasks.length == 1 ? '' : 's'} à l’Inbox',
+      );
+    }
+    return true;
+  }
+
+  Future<void> _openAiTaskScreen() async {
+    await Navigator.of(_appContext!).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => _AiTaskScreen(
+          consentGranted: _aiConsentGranted,
+          onConsentAccepted: () => _setAiConsent(true),
+          onAnalyze: _analyzeAiTasks,
+          onAddToInbox: _addAiTasksToInbox,
+          onConnect: _showAccountDialog,
+        ),
+      ),
+    );
   }
 
   void _openProductGuide() {
@@ -532,8 +881,11 @@ class _PlanoAppState extends State<PlanoApp> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showTaskEditor,
-        backgroundColor: _primary,
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(_themeContext).colorScheme.primary,
+        foregroundColor: Theme.of(_themeContext).colorScheme.onPrimary,
+        elevation: 0,
+        focusElevation: 0,
+        hoverElevation: 0,
         shape: const CircleBorder(),
         child: const Icon(Icons.add_rounded, size: 30),
       ),
@@ -1060,7 +1412,11 @@ class _PlanoAppState extends State<PlanoApp> {
         padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 28),
         child: Column(
           children: [
-            Icon(icon, size: 34, color: _primary),
+            Icon(
+              icon,
+              size: 34,
+              color: Theme.of(_themeContext).colorScheme.primary,
+            ),
             const SizedBox(height: 12),
             Text(
               title,
@@ -1071,7 +1427,7 @@ class _PlanoAppState extends State<PlanoApp> {
               message,
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                color: Theme.of(_themeContext).colorScheme.onSurfaceVariant,
                 height: 1.4,
               ),
             ),

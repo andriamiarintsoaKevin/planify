@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:sqflite/sqflite.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../domain/planner.dart';
+import 'ai_task_service.dart';
 import 'database_initializer.dart';
 import 'plano_repository.dart';
 import 'task_id.dart';
@@ -115,6 +117,20 @@ class SqlitePlanifyRepository implements PlanoRepository, SyncTaskRepository {
         'updated_at': nowIso,
       });
       await _enqueue(transaction, deleted, SyncOperationType.delete);
+    });
+  }
+
+  @override
+  Future<void> clearLocalAccountData({required bool deleteTasks}) async {
+    final database = await _db;
+    await database.transaction((transaction) async {
+      await transaction.delete('sync_queue');
+      await transaction.delete('sync_metadata');
+      if (deleteTasks) {
+        await transaction.delete('tasks');
+        await transaction.delete('preferences');
+        await transaction.delete('calendar_settings');
+      }
     });
   }
 
@@ -288,6 +304,31 @@ class SqlitePlanifyRepository implements PlanoRepository, SyncTaskRepository {
       'key': 'dark_mode',
       'value': enabled ? 1 : 0,
     }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<bool> loadAiConsent() async {
+    final rows = await (await _db).query(
+      'preferences',
+      columns: ['value'],
+      where: 'key = ?',
+      whereArgs: ['ai_gemini_consent'],
+      limit: 1,
+    );
+    return rows.isNotEmpty && rows.single['value']! as int == 1;
+  }
+
+  Future<void> saveAiConsent(bool granted) async {
+    await (await _db).insert('preferences', {
+      'key': 'ai_gemini_consent',
+      'value': granted ? 1 : 0,
+    }, conflictAlgorithm: ConflictAlgorithm.replace);
+  }
+
+  Future<List<PlanoTask>> parseAiTasks({
+    required SupabaseClient client,
+    required String text,
+  }) async {
+    return AiTaskService(client).analyze(text);
   }
 
   @override

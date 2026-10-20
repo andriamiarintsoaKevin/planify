@@ -12,6 +12,8 @@ abstract interface class AuthRepository {
   Future<void> signIn({required String email, required String password});
 
   Future<void> signOut();
+
+  Future<void> deleteAccount();
 }
 
 class SupabaseAuthRepository implements AuthRepository {
@@ -36,4 +38,7 @@ class SupabaseAuthRepository implements AuthRepository {
 
   @override
   Future<void> signOut() => _service.signOut();
+
+  @override
+  Future<void> deleteAccount() => _service.deleteAccount();
 }

@@ -91,6 +91,41 @@ void main() {
     await repositoryAfterDeletion.close();
   });
 
+  test('conserve les tâches locales et vide la file liée au compte', () async {
+    final repository = SqlitePlanifyRepository(databasePath: databasePath);
+    await repository.saveTasks(const [
+      PlanoTask(id: 'retained-task', title: 'Tâche locale conservée'),
+    ]);
+    await repository.saveDarkMode(true);
+    await repository.saveCalendarId('calendar-123');
+
+    expect(await repository.countPendingSyncOperations(), 1);
+    await repository.clearLocalAccountData(deleteTasks: false);
+
+    expect((await repository.loadTasks()).single.id, 'retained-task');
+    expect(await repository.countPendingSyncOperations(), 0);
+    expect(await repository.loadDarkMode(), isTrue);
+    expect(await repository.loadCalendarId(), 'calendar-123');
+    await repository.close();
+  });
+
+  test('efface les tâches locales et la file de synchronisation', () async {
+    final repository = SqlitePlanifyRepository(databasePath: databasePath);
+    await repository.saveTasks(const [
+      PlanoTask(id: 'erased-task', title: 'Tâche locale à effacer'),
+    ]);
+    await repository.saveDarkMode(true);
+    await repository.saveCalendarId('calendar-123');
+
+    await repository.clearLocalAccountData(deleteTasks: true);
+
+    expect(await repository.loadTasks(), isEmpty);
+    expect(await repository.countPendingSyncOperations(), 0);
+    expect(await repository.loadDarkMode(), isFalse);
+    expect(await repository.loadCalendarId(), isNull);
+    await repository.close();
+  });
+
   test('migre depuis la version précédente sans perdre les tâches', () async {
     final previousDatabase = await databaseFactory.openDatabase(
       databasePath,

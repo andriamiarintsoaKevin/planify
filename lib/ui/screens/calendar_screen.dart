@@ -2,6 +2,7 @@ part of '../../main.dart';
 
 extension _PlanoCalendarScreen on _PlanoAppState {
   Widget _calendarPage() {
+    final context = _themeContext;
     final scheduled =
         _tasks
             .where(
@@ -63,18 +64,26 @@ extension _PlanoCalendarScreen on _PlanoAppState {
                     ),
                     title: Text(task.title),
                     subtitle: Text(
-                      '${_taskTimeRangeOnDay(task, _selectedDate)}'
-                      '${task.project.isEmpty ? '' : ' · ${task.project}'}',
+                      _appearanceSettings
+                                  .effective(proAccess: _hasProAppearance)
+                                  .plannerDisplay ==
+                              PlannerDisplay.detailed
+                          ? '${_taskTimeRangeOnDay(task, _selectedDate)}'
+                                ' · ${task.durationMinutes} min'
+                                ' · ${_priorityLabel(task.priority)}'
+                                '${task.project.isEmpty ? '' : ' · ${task.project}'}'
+                          : '${_taskTimeRangeOnDay(task, _selectedDate)}'
+                                '${task.project.isEmpty ? '' : ' · ${task.project}'}',
                     ),
                     trailing: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         if (_hasScheduleConflict(task))
-                          const Tooltip(
+                          Tooltip(
                             message: 'Cette tâche chevauche une autre tâche',
                             child: Icon(
                               Icons.warning_amber_rounded,
-                              color: _danger,
+                              color: Theme.of(context).colorScheme.error,
                             ),
                           ),
                         if (task.isLocked)

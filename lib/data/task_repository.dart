@@ -6,6 +6,8 @@ abstract interface class TaskRepository {
   Future<void> saveTasks(List<PlanoTask> tasks);
 
   Future<void> softDeleteTask(String id);
+
+  Future<void> clearLocalAccountData({required bool deleteTasks});
 }
 
 enum SyncOperationType { create, update, delete }

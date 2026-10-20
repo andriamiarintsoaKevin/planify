@@ -75,7 +75,7 @@ void main() {
       result.placements.every((placement) => !placement.start.isBefore(start)),
       isTrue,
     );
-    expect(result.placements.single.start, start);
+    expect(result.placements.first.start, start);
   });
 
   test('place les tâches sans chevaucher les événements ni la pause', () {

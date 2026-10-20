@@ -1,10 +1,140 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:planify/data/auth_repository.dart';
+import 'package:planify/data/entitlement_service.dart';
 import 'package:planify/data/in_memory_planify_repository.dart';
 import 'package:planify/domain/planner.dart';
 import 'package:planify/main.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
+  testWidgets('les réglages gratuits gardent le thème indigo par défaut', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    final defaultPrimary = buildPlanifyTheme(
+      const AppearanceSettings(),
+      proAccess: false,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      defaultPrimary,
+    );
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Personnaliser l’apparence'));
+    await tester.pumpAndSettle();
+    expect(find.text('Pro'), findsWidgets);
+    await tester.tap(find.text('Océan'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Option Pro'), findsOneWidget);
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      defaultPrimary,
+    );
+  });
+
+  testWidgets('les choix Pro expirent visuellement sans perdre la sélection', (
+    WidgetTester tester,
+  ) async {
+    var now = DateTime.utc(2030, 1, 1);
+    final entitlement = EntitlementService(
+      apiKey: 'test-public-key',
+      appUserId: 'test-user',
+      proEntitlementId: 'pro',
+      provider: _AppearanceEntitlementProvider(
+        ProEntitlementStatus(
+          isActive: true,
+          expiresAt: now.add(const Duration(hours: 1)),
+          willRenew: true,
+        ),
+      ),
+      cache: _MemoryAppearanceEntitlementCache(),
+      clock: () => now,
+    );
+    await entitlement.initialize();
+    await tester.pumpWidget(
+      PlanoApp(
+        repository: InMemoryPlanifyRepository(),
+        entitlementService: entitlement,
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Personnaliser l’apparence'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Océan'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Compacte'));
+    await tester.tap(find.text('Compacte'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Détaillé'));
+    await tester.tap(find.text('Détaillé'));
+    await tester.pumpAndSettle();
+
+    final proPrimary = buildPlanifyTheme(
+      const AppearanceSettings(theme: AppearanceTheme.ocean),
+      proAccess: true,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      proPrimary,
+    );
+
+    now = now.add(const Duration(hours: 2));
+    await tester.pump(const Duration(minutes: 1));
+    await tester.pump();
+    final freePrimary = buildPlanifyTheme(
+      const AppearanceSettings(),
+      proAccess: false,
+    ).colorScheme.primary;
+    expect(
+      tester
+          .widget<MaterialApp>(find.byType(MaterialApp))
+          .theme!
+          .colorScheme
+          .primary,
+      freePrimary,
+    );
+
+    final preferences = await SharedPreferences.getInstance();
+    final saved = jsonDecode(
+      preferences.getString('planify.appearance.v1')!,
+    ) as Map<String, dynamic>;
+    expect(saved['theme'], AppearanceTheme.ocean.name);
+    expect(saved['density'], AppearanceDensity.compact.name);
+    expect(saved['plannerDisplay'], PlannerDisplay.detailed.name);
+    expect(find.text('Détaillé'), findsOneWidget);
+    expect(find.text('Pro'), findsWidgets);
+    entitlement.dispose();
+  });
+
   testWidgets('affiche les notifications en haut avec une progression', (
     WidgetTester tester,
   ) async {
@@ -49,6 +179,152 @@ void main() {
     expect(find.text('0 à planifier'), findsOneWidget);
     expect(find.text('Votre Inbox est vide'), findsOneWidget);
     expect(find.text('Planifier automatiquement les 4 tâches'), findsNothing);
+  });
+
+  testWidgets('exporte les tâches et réglages dans un JSON copiable', (
+    WidgetTester tester,
+  ) async {
+    final repository = InMemoryPlanifyRepository();
+    await repository.saveTasks([
+      PlanoTask(
+        id: 'export-task',
+        title: 'Préparer le dossier',
+        dueDate: DateTime(2026, 10, 20),
+      ),
+    ]);
+    await repository.saveDarkMode(true);
+    await repository.saveCalendarId('calendar-123');
+    await tester.pumpWidget(PlanoApp(repository: repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Exporter mes données'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Exporter mes données'));
+    await tester.pumpAndSettle();
+
+    final jsonText = tester
+        .widget<SelectableText>(find.byType(SelectableText))
+        .data!;
+    final export = jsonDecode(jsonText) as Map<String, dynamic>;
+    final task = (export['tasks'] as List).single as Map<String, dynamic>;
+    final settings = export['settings'] as Map<String, dynamic>;
+
+    expect(export['formatVersion'], 1);
+    expect(task['id'], 'export-task');
+    expect(task['title'], 'Préparer le dossier');
+    expect(task['dueDate'], '2026-10-20T00:00:00.000');
+    expect(settings['darkMode'], isTrue);
+    expect(settings['calendarId'], 'calendar-123');
+    expect(settings['aiGeminiConsentGranted'], isFalse);
+    expect(find.text('Copier le JSON'), findsOneWidget);
+  });
+
+  testWidgets(
+    'confirme la suppression serveur avant de proposer la conservation locale',
+    (WidgetTester tester) async {
+      final events = <String>[];
+      final repository = _TrackingPlanifyRepository(events);
+      await repository.saveTasks(const [
+        PlanoTask(id: 'local-task', title: 'Tâche conservée'),
+      ]);
+      final authRepository = _FakeAuthRepository(events);
+      await tester.pumpWidget(
+        PlanoApp(repository: repository, authRepository: authRepository),
+      );
+      await tester.pumpAndSettle();
+
+      await _openAccountDeletion(tester);
+      expect(find.text('Supprimer définitivement le compte ?'), findsOneWidget);
+      expect(events, isEmpty);
+
+      await tester.tap(find.text('Supprimer définitivement'));
+      await tester.pumpAndSettle();
+      expect(events, ['delete-account']);
+      expect(authRepository.currentUser, isNull);
+      expect(find.text('Que faire des données locales ?'), findsOneWidget);
+
+      await tester.tap(find.text('Garder localement'));
+      await tester.pumpAndSettle();
+
+      expect(events, ['delete-account', 'clear-local-keep']);
+      expect((await repository.loadTasks()).single.id, 'local-task');
+      expect(authRepository.currentUser, isNull);
+    },
+  );
+
+  testWidgets('efface les tâches locales après le choix post-suppression', (
+    WidgetTester tester,
+  ) async {
+    final events = <String>[];
+    final repository = _TrackingPlanifyRepository(events);
+    await repository.saveTasks(const [
+      PlanoTask(id: 'local-task', title: 'Tâche à effacer'),
+    ]);
+    final authRepository = _FakeAuthRepository(events);
+    await tester.pumpWidget(
+      PlanoApp(repository: repository, authRepository: authRepository),
+    );
+    await tester.pumpAndSettle();
+
+    await _openAccountDeletion(tester);
+    await tester.tap(find.text('Supprimer définitivement'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Tout effacer'));
+    await tester.tap(find.widgetWithText(FilledButton, 'Tout effacer'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Que faire des données locales ?'), findsNothing);
+    expect(events, ['delete-account', 'clear-local-delete']);
+    expect(await repository.loadTasks(), isEmpty);
+    expect(authRepository.currentUser, isNull);
+  });
+
+  testWidgets('bloque l’analyse IA tant que le consentement est refusé', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(PlanoApp(repository: InMemoryPlanifyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Réglages').last);
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Assistant IA'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+    await tester.tap(find.text('Assistant IA'));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byType(TextField).first,
+      'Préparer une présentation',
+    );
+    await tester.tap(find.text('Analyser'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('Votre texte est envoyé à Google (Gemini) pour être analysé'),
+      findsOneWidget,
+    );
+    await tester.tap(find.text('Pas maintenant'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Créer avec l’IA'), findsOneWidget);
+    expect(
+      find.text('Connectez-vous pour utiliser l’analyse IA.'),
+      findsNothing,
+    );
+
+    await tester.tap(find.text('Analyser'));
+    await tester.pumpAndSettle();
+    expect(
+      find.text('Votre texte est envoyé à Google (Gemini) pour être analysé'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('permet de prévisualiser puis valider un plan', (
@@ -387,9 +663,12 @@ void main() {
 
     await tester.tap(find.text('Réglages').last);
     await tester.pumpAndSettle();
-    await tester.drag(find.byType(ListView).last, const Offset(0, -260));
+    await tester.scrollUntilVisible(
+      find.text('Comprendre Planify'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.text('Comprendre Planify'));
     await tester.tap(find.text('Comprendre Planify'));
     await tester.pumpAndSettle();
 
@@ -454,4 +733,104 @@ void main() {
 
     expect(find.byIcon(Icons.warning_amber_rounded), findsNWidgets(2));
   });
+}
+
+Future<void> _openAccountDeletion(WidgetTester tester) async {
+  await tester.tap(find.text('Réglages').last);
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.text('Mes données'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  expect(find.text('Mes données'), findsOneWidget);
+  await tester.scrollUntilVisible(
+    find.text('Supprimer mon compte'),
+    300,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.ensureVisible(find.text('Supprimer mon compte'));
+  await tester.tap(find.text('Supprimer mon compte'));
+  await tester.pumpAndSettle();
+}
+
+class _TrackingPlanifyRepository extends InMemoryPlanifyRepository {
+  _TrackingPlanifyRepository(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<void> clearLocalAccountData({required bool deleteTasks}) {
+    events.add(deleteTasks ? 'clear-local-delete' : 'clear-local-keep');
+    return super.clearLocalAccountData(deleteTasks: deleteTasks);
+  }
+}
+
+class _FakeAuthRepository implements AuthRepository {
+  _FakeAuthRepository(this.events);
+
+  final List<String> events;
+  User? _user = User.fromJson({
+    'id': '00000000-0000-4000-8000-000000000001',
+    'aud': 'authenticated',
+    'created_at': DateTime.utc(2026).toIso8601String(),
+    'app_metadata': <String, dynamic>{},
+    'user_metadata': <String, dynamic>{},
+  });
+
+  @override
+  User? get currentUser => _user;
+
+  @override
+  Stream<AuthState> get authStateChanges => const Stream<AuthState>.empty();
+
+  @override
+  Future<void> deleteAccount() async {
+    events.add('delete-account');
+    _user = null;
+  }
+
+  @override
+  Future<void> signIn({
+    required String email,
+    required String password,
+  }) async {}
+
+  @override
+  Future<void> signOut() async {}
+
+  @override
+  Future<void> signUp({
+    required String email,
+    required String password,
+  }) async {}
+}
+
+class _AppearanceEntitlementProvider implements EntitlementProvider {
+  _AppearanceEntitlementProvider(this.status);
+
+  final ProEntitlementStatus status;
+
+  @override
+  Future<void> configure({
+    required String apiKey,
+    required String appUserId,
+  }) async {}
+
+  @override
+  Future<ProEntitlementStatus> fetchProEntitlement(
+    String entitlementId,
+  ) async => status;
+}
+
+class _MemoryAppearanceEntitlementCache implements EntitlementCache {
+  EntitlementSnapshot? snapshot;
+
+  @override
+  Future<EntitlementSnapshot?> read(String appUserId) async => snapshot;
+
+  @override
+  Future<void> write(String appUserId, EntitlementSnapshot snapshot) async {
+    this.snapshot = snapshot;
+  }
 }

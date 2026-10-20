@@ -2,6 +2,7 @@ part of '../../main.dart';
 
 extension _PlanoTodayScreen on _PlanoAppState {
   Widget _todayPage() {
+    final context = _themeContext;
     final scheduled =
         _tasks
             .where(
@@ -48,9 +49,11 @@ extension _PlanoTodayScreen on _PlanoAppState {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        const Text(
-                          'Aujourd’hui',
-                          style: TextStyle(
+                        Text(
+                          _sameDay(_selectedDate, DateTime.now())
+                              ? 'Aujourd’hui'
+                              : 'Votre journée',
+                          style: const TextStyle(
                             fontSize: 30,
                             fontWeight: FontWeight.w700,
                           ),
@@ -75,9 +78,11 @@ extension _PlanoTodayScreen on _PlanoAppState {
                 icon: const Icon(Icons.auto_awesome_outlined),
                 label: const Text('Réorganiser ma journée'),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: _primary,
+                  foregroundColor: Theme.of(context).colorScheme.primary,
                   minimumSize: const Size.fromHeight(50),
-                  side: const BorderSide(color: _primary),
+                  side: BorderSide(
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -132,6 +137,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
   }
 
   Widget _dayStrip() {
+    final context = _themeContext;
     final firstDay = _selectedDate.subtract(
       Duration(days: (_selectedDate.weekday - DateTime.monday) % 7),
     );
@@ -164,14 +170,18 @@ extension _PlanoTodayScreen on _PlanoAppState {
                     height: 36,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: isSelected ? _primary : Colors.transparent,
+                      color: isSelected
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
                       shape: BoxShape.circle,
                     ),
                     child: Text(
                       '${date.day}',
                       style: TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: const Color.fromARGB(255, 104, 129, 150),
+                        color: isSelected
+                            ? Theme.of(context).colorScheme.onPrimary
+                            : Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                   ),
@@ -180,7 +190,9 @@ extension _PlanoTodayScreen on _PlanoAppState {
                     width: 4,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: hasTasks ? _primary : Colors.transparent,
+                      color: hasTasks
+                          ? Theme.of(context).colorScheme.primary
+                          : Colors.transparent,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -194,6 +206,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
   }
 
   Widget _summaryCard(int taskCount, int totalMinutes, double load) {
+    final context = _themeContext;
     final hours = totalMinutes ~/ 60;
     final minutes = totalMinutes % 60;
     return Card(
@@ -213,7 +226,9 @@ extension _PlanoTodayScreen on _PlanoAppState {
                     backgroundColor: Theme.of(context)
                         .colorScheme
                         .primaryContainer,
-                    color: load >= 1 ? _warning : _primary,
+                    color: load >= 1
+                        ? _warning
+                        : Theme.of(context).colorScheme.primary,
                   ),
                   Text(
                     '${(load * 100).round()}%',
@@ -438,15 +453,12 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                             task.title,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
-                                            style: const TextStyle(
+                                            style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
-                                              color: Color.fromARGB(
-                                                255,
-                                                47,
-                                                43,
-                                                43,
-                                              ),
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .onSurface,
                                             ),
                                           ),
                                         ),
@@ -462,12 +474,14 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                             ),
                                           ),
                                         if (_hasScheduleConflict(task))
-                                          const Padding(
+                                          Padding(
                                             padding: EdgeInsets.only(left: 3),
                                             child: Icon(
                                               Icons.warning_amber_rounded,
                                               size: 15,
-                                              color: _danger,
+                                              color: Theme.of(context)
+                                                  .colorScheme
+                                                  .error,
                                             ),
                                           ),
                                       ],
@@ -484,12 +498,9 @@ extension _PlanoTodayScreen on _PlanoAppState {
                                         ),
                                         style: TextStyle(
                                           fontSize: 10,
-                                          color: Color.fromARGB(
-                                            255,
-                                            47,
-                                            43,
-                                            43,
-                                          ),
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
                                         ),
                                       ),
                                   ],
@@ -509,10 +520,19 @@ extension _PlanoTodayScreen on _PlanoAppState {
                           hourHeight,
                       left: 52,
                       right: 8,
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.circle, size: 8, color: _danger),
-                          Expanded(child: Divider(color: _danger, height: 1)),
+                          Icon(
+                            Icons.circle,
+                            size: 8,
+                            color: Theme.of(context).colorScheme.error,
+                          ),
+                          Expanded(
+                            child: Divider(
+                              color: Theme.of(context).colorScheme.error,
+                              height: 1,
+                            ),
+                          ),
                         ],
                       ),
                     ),
@@ -535,6 +555,7 @@ extension _PlanoTodayScreen on _PlanoAppState {
     required Widget child,
     bool isTaskBubble = false,
   }) {
+    final context = _themeContext;
     final top = taskTopOffset(start, dayStart);
     final height = taskHeight(duration);
     return Positioned(
@@ -577,15 +598,18 @@ extension _PlanoTodayScreen on _PlanoAppState {
     );
   }
 
-  Widget _eventTile(FixedEvent event) => Card(
-    child: ListTile(
-      leading: Icon(
-        Icons.event_available_outlined,
-        color: Theme.of(context).colorScheme.onSurfaceVariant,
+  Widget _eventTile(FixedEvent event) {
+    final context = _themeContext;
+    return Card(
+      child: ListTile(
+        leading: Icon(
+          Icons.event_available_outlined,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+        ),
+        title: Text(event.title),
+        subtitle: Text('${_clock(event.start)}–${_clock(event.end)} · Fixe'),
+        dense: true,
       ),
-      title: Text(event.title),
-      subtitle: Text('${_clock(event.start)}–${_clock(event.end)} · Fixe'),
-      dense: true,
-    ),
-  );
+    );
+  }
 }

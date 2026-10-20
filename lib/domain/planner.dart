@@ -116,11 +116,13 @@ class PlanResult {
     required this.placements,
     required this.unplaced,
     required this.explanations,
+    this.unplacedReasons = const {},
   });
 
   final List<TaskPlacement> placements;
   final List<PlanoTask> unplaced;
   final List<String> explanations;
+  final Map<String, String> unplacedReasons;
 }
 
 class PlanSettings {
@@ -207,6 +209,7 @@ PlanResult generatePlan({
   final occupied = List<_Interval>.of(fixed);
   final placements = <TaskPlacement>[];
   final unplaced = <PlanoTask>[];
+  final unplacedReasons = <String, String>{};
 
   for (final task in orderedTasks) {
     final duration = task.durationMinutes ?? 30;
@@ -224,6 +227,14 @@ PlanResult generatePlan({
       if (task.dueDate != null && candidateEnd.isAfter(task.dueDate!)) {
         continue;
       }
+      if (settings.lunchStart != null && settings.lunchEnd != null) {
+        final endsAtOrAfterLunch =
+            candidateEnd.isAfter(settings.lunchStart!) ||
+            candidateEnd.isAtSameMomentAs(settings.lunchStart!);
+        if (endsAtOrAfterLunch && candidateStart.isBefore(settings.lunchEnd!)) {
+          continue;
+        }
+      }
       final placement = TaskPlacement(
         task: task,
         start: candidateStart,
@@ -236,7 +247,13 @@ PlanResult generatePlan({
       break;
     }
 
-    if (!placementFound) unplaced.add(task);
+    if (!placementFound) {
+      unplaced.add(task);
+      unplacedReasons[task.id] = _unplacedReason(
+        task: task,
+        freeIntervals: possibleIntervals,
+      );
+    }
   }
 
   placements.sort((a, b) => a.start.compareTo(b.start));
@@ -247,7 +264,38 @@ PlanResult generatePlan({
       placements,
       prioritizeHighPriority: settings.prioritizeHighPriority,
     ),
+    unplacedReasons: unplacedReasons,
   );
+}
+
+String _unplacedReason({
+  required PlanoTask task,
+  required List<_Interval> freeIntervals,
+}) {
+  final duration = task.durationMinutes ?? 30;
+  final beforeDeadline = task.dueDate == null
+      ? freeIntervals
+      : freeIntervals.where(
+          (slot) => !slot.end.isAfter(task.dueDate!),
+        );
+  if (task.dueDate != null &&
+      (beforeDeadline.isEmpty ||
+          beforeDeadline.every(
+            (slot) => slot.end.difference(slot.start).inMinutes < duration,
+          ))) {
+    return 'La deadline ne laisse pas assez de temps libre.';
+  }
+  final totalFreeMinutes = freeIntervals.fold<int>(
+    0,
+    (sum, interval) => sum + interval.end.difference(interval.start).inMinutes,
+  );
+  if (freeIntervals.isEmpty) {
+    return 'Aucun créneau disponible dans cette journée.';
+  }
+  if (duration > totalFreeMinutes) {
+    return 'Durée supérieure au temps libre disponible.';
+  }
+  return 'Aucun créneau disponible dans cette journée.';
 }
 
 List<_Interval> _freeIntervals(
